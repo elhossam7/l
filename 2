@@ -1,0 +1,46 @@
+Spot on! Running `ip a` reveals exactly why you are getting that connection timeout. 
+
+Your `ens160` network interface is currently assigned a dynamic IP of `10.30.42.77`. [cite_start]However, according to your project's architecture, the ELK Stack VM is supposed to be statically assigned to `172.16.10.10` on the isolated `172.16.10.0/24` network[cite: 4, 12]. 
+
+Because the machine doesn't actually own the IP `172.16.10.10`, your `curl` request is getting routed off into the void and dropping. 
+
+Here is how to align your VM with your lab architecture to fix the connection:
+
+### 1. Verify the VMware ESXi Network
+First, ensure this VM is connected to the correct virtual switch. 
+[cite_start]According to your guide, the VMs should be on a dedicated, isolated vSwitch called **LAB-NET**[cite: 18]. If it is currently connected to the management network or a default VM Network (which is likely, given the `10.30.x.x` DHCP address), you need to change it in the ESXi interface.
+* Go to your ESXi dashboard -> Virtual Machines -> Right-click **ELK-PG** -> Edit Settings.
+* Change the Network Adapter to your **LAB-NET** port group.
+
+### 2. Configure the Static IP in Ubuntu
+Once it's on the right virtual switch, you need to configure Ubuntu (which uses Netplan) to set the static IP.
+
+1. Open your Netplan configuration file. The filename usually looks something like `00-installer-config.yaml` or `50-cloud-init.yaml`:
+   ```bash
+   ls /etc/netplan/
+   sudo nano /etc/netplan/your_config_file_name.yaml
+   ```
+
+2. Modify the file to assign the static IP to `ens160`. [cite_start]Since your `LAB-NET` is an isolated environment without an uplink[cite: 18, 21], you likely don't need a default gateway here. Make it look like this:
+   ```yaml
+   network:
+     version: 2
+     ethernets:
+       ens160:
+         dhcp4: no
+         addresses:
+           - 172.16.10.10/24
+   ```
+
+3. Save the file and apply the configuration:
+   ```bash
+   sudo netplan apply
+   ```
+
+4. Run `ip a` one more time. You should now see `172.16.10.10` assigned to `ens160`.
+
+### 3. Test the Connection Again
+Once the IP is correctly assigned, your `curl` command should finally reach Elasticsearch. Assuming you kept the `https://` fix from earlier, run:
+
+```bash
+curl -k -u elastic:ud5zFQt4Epc=sg4Un0wn https://172.16.10.10:9200
