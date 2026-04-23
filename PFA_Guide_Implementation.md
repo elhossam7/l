@@ -362,15 +362,171 @@ Get-Content "C:\ProgramData\winlogbeat\Logs\winlogbeat" -Tail 20
 
 Suricata analyse le trafic reseau en mode NIC promiscueux pour detecter les attaques reseau (scan, brute-force, exploitation).
 
+```bash
+# Installer Suricata sur Ubuntu/Debian
+sudo add-apt-repository ppa:oisf/suricata-stable
+sudo apt update
+sudo apt install -y suricata
+
+# Verifier la version
+suricata --build-info
+
+# Identifier l'interface reseau a surveiller
+ip a
+# Exemple : ens33
+
+# Configurer Suricata
+sudo nano /etc/suricata/suricata.yaml
+```
+
+**Extraits cles de `/etc/suricata/suricata.yaml` :**
+
+```yaml
+# Interface reseau
+af-packet:
+  - interface: ens33
+    cluster-id: 99
+    cluster-type: cluster_flow
+    defrag: yes
+
+# Repertoire des regles
+default-rule-path: /var/lib/suricata/rules
+
+rule-files:
+  - suricata.rules
+
+# Sortie EVE JSON (pour Filebeat)
+outputs:
+  - eve-log:
+      enabled: yes
+      filetype: regular
+      filename: /var/log/suricata/eve.json
+      types:
+        - alert
+        - dns
+        - http
+        - tls
+        - ssh
+        - flow
+```
+
+```bash
+# Mettre a jour les regles Suricata (Emerging Threats)
+sudo suricata-update
+
+# Tester la configuration
+sudo suricata -T -c /etc/suricata/suricata.yaml -v
+
+# Activer et demarrer Suricata
+sudo systemctl enable suricata
+sudo systemctl start suricata
+sudo systemctl status suricata
+
+# Verifier les logs en temps reel
+sudo tail -f /var/log/suricata/eve.json | python3 -m json.tool
+sudo tail -f /var/log/suricata/fast.log
+```
+
 ### Regles de Detection
 
+```bash
+# Ajouter des regles personnalisees
+sudo nano /etc/suricata/rules/local.rules
+```
+
+```text
+# Detection scan Nmap
+alert tcp any any -> $HOME_NET any (msg:"NMAP SYN Scan"; flags:S,12; threshold: type threshold, track by_src, count 20, seconds 5; sid:1000001; rev:1;)
+
+# Detection brute force SSH
+alert tcp any any -> $HOME_NET 22 (msg:"SSH Brute Force Attempt"; flow:to_server; threshold: type threshold, track by_src, count 10, seconds 30; sid:1000002; rev:1;)
+
+# Detection Kerberoasting (TGS-REQ RC4)
+alert dns any any -> any any (msg:"Possible Kerberoasting - TGS RC4"; content:"|17 00|"; sid:1000003; rev:1;)
+
+# Detection Pass-the-Hash SMB
+alert smb any any -> $HOME_NET 445 (msg:"Possible Pass-the-Hash SMB"; flow:to_server,established; sid:1000004; rev:1;)
+```
+
+```bash
+# Ajouter le fichier local.rules dans suricata.yaml
+# Puis recharger les regles sans redemarrage
+sudo kill -USR2 $(pidof suricata)
+```
+
 ### Integration Suricata → ELK via Filebeat
+
+```bash
+# Installer Filebeat sur la VM Suricata
+curl -fsSL https://artifacts.elastic.co/GPG-KEY-elasticsearch | sudo gpg --dearmor -o /usr/share/keyrings/elastic.gpg
+echo "deb [signed-by=/usr/share/keyrings/elastic.gpg] https://artifacts.elastic.co/packages/8.x/apt stable main" | sudo tee /etc/apt/sources.list.d/elastic-8.x.list
+sudo apt update && sudo apt install -y filebeat
+
+# Activer le module Suricata
+sudo filebeat modules enable suricata
+sudo nano /etc/filebeat/modules.d/suricata.yml
+```
+
+```yaml
+- module: suricata
+  eve:
+    enabled: true
+    var.paths: ["/var/log/suricata/eve.json"]
+```
+
+```bash
+# Configurer Filebeat pour envoyer vers Logstash
+sudo nano /etc/filebeat/filebeat.yml
+```
+
+```yaml
+output.logstash:
+  hosts: ["172.16.10.11:5044"]
+
+setup.kibana:
+  host: "172.16.10.11:5601"
+```
+
+```bash
+# Demarrer Filebeat
+sudo systemctl enable filebeat
+sudo systemctl start filebeat
+sudo systemctl status filebeat
+```
+
+---
 
 # 6. Phase 4 — Machine Attaquante Kali Linux (Semaine 3-4)
 
 La machine Kali Linux (172.16.10.50) simule un attaquant interne ou externe ayant un acces au reseau du lab.
 
 ## 6.1 Installation et Configuration Kali
+
+```bash
+# Mise a jour complete du systeme Kali
+sudo apt update && sudo apt full-upgrade -y
+
+# Installer les outils necessaires pour les scenarios
+sudo apt install -y \
+  nmap \
+  hydra \
+  crackmapexec \
+  impacket-scripts \
+  bloodhound \
+  neo4j \
+  mimikatz \
+  smbclient \
+  python3-bloodhound
+
+# Configurer le fichier /etc/hosts pour resoudre lab.local
+echo "172.16.10.20  dc01.lab.local  lab.local" | sudo tee -a /etc/hosts
+echo "172.16.10.30  srv-win.lab.local" | sudo tee -a /etc/hosts
+echo "172.16.10.35  srv-linux.lab.local" | sudo tee -a /etc/hosts
+
+# Verifier la connectivite reseau
+ping -c 3 172.16.10.20
+nmap -sn 172.16.10.0/24
+```
 
 ## 6.2 Scenarios d'Attaques a Implementer
 
