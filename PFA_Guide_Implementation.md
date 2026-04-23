@@ -98,11 +98,169 @@ L'ELK Stack est le coeur du SOC. Elle centralise tous les logs et fournit la det
 
 ### Prerequis Systeme
 
+Connectez-vous en SSH sur la VM ELK (Ubuntu Server 22.04, IP : 172.16.10.10) :
+
+```bash
+# Mise a jour du systeme
+sudo apt update && sudo apt upgrade -y
+
+# Installation des dependances
+sudo apt install -y apt-transport-https ca-certificates curl gnupg lsb-release wget
+
+# Ajouter la cle GPG Elastic
+wget -qO - https://artifacts.elastic.co/GPG-KEY-elasticsearch | sudo gpg --dearmor -o /usr/share/keyrings/elasticsearch-keyring.gpg
+
+# Ajouter le depot Elastic 8.x
+echo "deb [signed-by=/usr/share/keyrings/elasticsearch-keyring.gpg] https://artifacts.elastic.co/packages/8.x/apt stable main" | sudo tee /etc/apt/sources.list.d/elastic-8.x.list
+
+# Mettre a jour les paquets
+sudo apt update
+```
+
 ### Installation Elasticsearch
+
+```bash
+# Installer Elasticsearch
+sudo apt install -y elasticsearch
+
+# Conserver le mot de passe superuser affiche a l'installation !
+# Il sera necessaire pour la configuration de Kibana.
+
+# Configurer Elasticsearch
+sudo nano /etc/elasticsearch/elasticsearch.yml
+```
+
+Modifier les parametres suivants dans `elasticsearch.yml` :
+
+```yaml
+cluster.name: soc-lab
+node.name: elk-node-1
+network.host: 172.16.10.10
+http.port: 9200
+discovery.type: single-node
+xpack.security.enabled: true
+xpack.security.http.ssl.enabled: false   # Pour le lab uniquement
+```
+
+```bash
+# Activer et demarrer Elasticsearch
+sudo systemctl daemon-reload
+sudo systemctl enable elasticsearch
+sudo systemctl start elasticsearch
+
+# Verifier le statut
+sudo systemctl status elasticsearch
+
+# Tester la connexion (remplacer MOT_DE_PASSE par le mot de passe genere)
+curl -u elastic:MOT_DE_PASSE http://172.16.10.10:9200
+```
 
 ### Installation Kibana
 
+```bash
+# Installer Kibana
+sudo apt install -y kibana
+
+# Configurer Kibana
+sudo nano /etc/kibana/kibana.yml
+```
+
+Modifier les parametres suivants dans `kibana.yml` :
+
+```yaml
+server.port: 5601
+server.host: "172.16.10.10"
+server.name: "soc-kibana"
+elasticsearch.hosts: ["http://172.16.10.10:9200"]
+elasticsearch.username: "kibana_system"
+# elasticsearch.password: sera defini apres
+```
+
+```bash
+# Generer un token d'enrollment Kibana depuis Elasticsearch
+sudo /usr/share/elasticsearch/bin/elasticsearch-create-enrollment-token -s kibana
+
+# Definir le mot de passe du compte kibana_system
+sudo /usr/share/elasticsearch/bin/elasticsearch-reset-password -u kibana_system
+# Copier le mot de passe genere et l'ajouter dans kibana.yml :
+# elasticsearch.password: "LE_MOT_DE_PASSE_ICI"
+
+# Activer et demarrer Kibana
+sudo systemctl enable kibana
+sudo systemctl start kibana
+
+# Verifier le statut
+sudo systemctl status kibana
+# Interface accessible sur http://172.16.10.10:5601
+```
+
 ### Installation Logstash
+
+```bash
+# Installer Logstash
+sudo apt install -y logstash
+
+# Creer le pipeline de configuration principal
+sudo nano /etc/logstash/conf.d/beats-input.conf
+```
+
+Contenu du fichier `beats-input.conf` :
+
+```
+input {
+  beats {
+    port => 5044
+    host => "172.16.10.10"
+  }
+}
+
+filter {
+  if [agent][type] == "winlogbeat" {
+    mutate {
+      add_tag => ["windows", "winlogbeat"]
+    }
+  }
+  if [agent][type] == "filebeat" {
+    mutate {
+      add_tag => ["linux", "filebeat"]
+    }
+  }
+}
+
+output {
+  elasticsearch {
+    hosts => ["http://172.16.10.10:9200"]
+    user => "elastic"
+    password => "MOT_DE_PASSE_ELASTIC"
+    index => "logs-%{[agent][type]}-%{+YYYY.MM.dd}"
+  }
+  stdout { codec => rubydebug }
+}
+```
+
+```bash
+# Tester la configuration Logstash
+sudo /usr/share/logstash/bin/logstash --config.test_and_exit -f /etc/logstash/conf.d/
+
+# Activer et demarrer Logstash
+sudo systemctl enable logstash
+sudo systemctl start logstash
+
+# Verifier le statut
+sudo systemctl status logstash
+
+# Verifier que le port 5044 est ouvert
+ss -tlnp | grep 5044
+```
+
+```bash
+# Ouvrir les ports dans le firewall (UFW)
+sudo ufw allow 9200/tcp   # Elasticsearch API
+sudo ufw allow 5601/tcp   # Kibana
+sudo ufw allow 5044/tcp   # Logstash Beats input
+sudo ufw enable
+sudo ufw status
+```
 
 ## 4.2 Installation Sysmon sur Windows (Targets 1 et 2)
 
@@ -122,7 +280,81 @@ Sysmon enrichit les logs Windows avec des evenements critiques pour la detection
 > Event ID 22
 > DNS Query (C2 beaconing)
 
+Sur chaque machine Windows Target (Target 1 — alice.dupont et Target 2 — bob.admin), ouvrir PowerShell en tant qu'Administrateur :
+
+```powershell
+# Telecharger Sysmon depuis Sysinternals
+Invoke-WebRequest -Uri "https://download.sysinternals.com/files/Sysmon.zip" -OutFile "C:\Tools\Sysmon.zip"
+Expand-Archive -Path "C:\Tools\Sysmon.zip" -DestinationPath "C:\Tools\Sysmon"
+
+# Telecharger la configuration Sysmon recommandee (SwiftOnSecurity)
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/SwiftOnSecurity/sysmon-config/master/sysmonconfig-export.xml" -OutFile "C:\Tools\Sysmon\sysmonconfig.xml"
+
+# Installer Sysmon avec la configuration
+cd C:\Tools\Sysmon
+.\Sysmon64.exe -accepteula -i sysmonconfig.xml
+
+# Verifier que Sysmon est bien installe et actif
+Get-Service Sysmon64
+
+# Verifier les logs dans l'Observateur d'evenements
+# Applications and Services Logs > Microsoft > Windows > Sysmon > Operational
+```
+
 ## 4.3 Installation Winlogbeat (Windows → Logstash)
+
+Sur chaque machine Windows Target, ouvrir PowerShell en tant qu'Administrateur :
+
+```powershell
+# Telecharger Winlogbeat 8.x
+Invoke-WebRequest -Uri "https://artifacts.elastic.co/downloads/beats/winlogbeat/winlogbeat-8.13.0-windows-x86_64.zip" -OutFile "C:\Tools\winlogbeat.zip"
+Expand-Archive -Path "C:\Tools\winlogbeat.zip" -DestinationPath "C:\Program Files\Winlogbeat"
+cd "C:\Program Files\Winlogbeat\winlogbeat-8.13.0-windows-x86_64"
+
+# Editer la configuration Winlogbeat
+notepad winlogbeat.yml
+```
+
+Contenu de `winlogbeat.yml` :
+
+```yaml
+winlogbeat.event_logs:
+  - name: Application
+    ignore_older: 72h
+  - name: System
+  - name: Security
+  - name: Microsoft-Windows-Sysmon/Operational
+  - name: Microsoft-Windows-PowerShell/Operational
+  - name: Microsoft-Windows-Windows Defender/Operational
+
+output.logstash:
+  hosts: ["172.16.10.10:5044"]
+
+logging.level: info
+logging.to_files: true
+logging.files:
+  path: C:\ProgramData\winlogbeat\Logs
+  name: winlogbeat
+  keepfiles: 7
+```
+
+```powershell
+# Tester la configuration
+.\winlogbeat.exe test config -c winlogbeat.yml -e
+
+# Tester la connexion vers Logstash
+.\winlogbeat.exe test output -c winlogbeat.yml
+
+# Installer Winlogbeat comme service Windows
+.\install-service-winlogbeat.ps1
+
+# Demarrer le service
+Start-Service winlogbeat
+Get-Service winlogbeat
+
+# Verifier les logs de Winlogbeat
+Get-Content "C:\ProgramData\winlogbeat\Logs\winlogbeat" -Tail 20
+```
 
 # 5. Phase 3 — Suricata IDS Reseau (Semaine 3)
 
