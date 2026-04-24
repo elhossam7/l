@@ -1,35 +1,58 @@
-**PROJET FIN D'ANNEE SOC / Active Directory / DFIR**
+**PROJET FIN D'ANNEE SOC / Active Directory / DFIR / Threat Hunting / AI Automation**
 
-Guide Complet d'Implementation du Lab
+Guide Complet d'Implementation du Lab — v2.0
 
-| Infrastructure — Dell PowerEdge R750 — VMware ESXi 7.0 | Reseau — 172.16.10.0/24 — lab.local (isole) |
+| Infrastructure — Dell PowerEdge R750 — VMware ESXi 7.0 | Reseau — LAB-SWITCH VLAN 10/20/30/99 — lab.local |
 | --- | --- |
-| VMs — 7 machines virtuelles — 52 GB RAM / 660 GB | Date — Avril 2026 |
+| VMs — 13 machines virtuelles — 88 GB RAM / 1010 GB | Date — Avril 2026 |
+
+---
 
 # 1. Vue d'Ensemble du Projet
 
-Ce projet de fin d'annee consiste a deployer un laboratoire de securite informatique complet simulant un environnement d'entreprise reel. L'objectif est de mettre en oeuvre trois domaines fondamentaux de la cybersecurite :
+Ce projet de fin d'annee consiste a deployer un laboratoire de securite informatique complet simulant un environnement d'entreprise reel. L'objectif est de couvrir cinq domaines fondamentaux de la cybersecurite :
 
-> Objectifs Principaux
-> SOC (Security Operations Center) : Collecte, correlation et analyse des evenements de securite en temps reel via ELK Stack
-> Active Directory : Gestion centralisee des identites, authentification Kerberos, politiques GPO et simulation d'attaques AD
-> DFIR (Digital Forensics & Incident Response) : Investigation numerique, analyse forensique des artefacts et reponse aux incidents
+> **Objectifs Principaux**
+> - **SOC** : Collecte, correlation et analyse des evenements via ELK Stack + Elastic Security
+> - **Active Directory** : Gestion des identites, Kerberos, GPO, simulation d'attaques AD
+> - **DFIR** : Investigation numerique, analyse forensique, reponse aux incidents
+> - **Threat Hunting** : Detection proactive via Velociraptor, Sigma Rules, OpenCTI, ATT&CK
+> - **AI Automation** : Triage automatise des alertes via Shuffle SOAR + Ollama LLM local
 
-## 1.1 Architecture Globale
+## 1.1 Architecture Globale — Reseau VLAN
 
-Le lab est hote sur un serveur Dell PowerEdge R750 sous VMware ESXi 7.0. Toutes les VMs communiquent sur un vSwitch isole (LAB-NET) sans connexion Internet, garantissant la securite des experimentations.
+Le lab est heberge sur un serveur Dell PowerEdge R750 sous VMware ESXi 7.0. Un vSwitch interne (LAB-SWITCH) segmente le trafic en 5 zones via pfSense. Aucun uplink physique — le lab est completement isole du reseau de l'ecole sauf via pfSense (WAN NAT).
 
-| VM | RAM | vCPU | Disque | IP | Role |
-| --- | --- | --- | --- | --- | --- |
-| ELK Stack (SIEM) | 16 GB | 4 | 200 GB | .10 | Collecte & analyse logs |
-| Active Directory DC | 4 GB | 2 | 80 GB | .20 | DNS, Kerberos, LDAP, GPO |
-| Suricata IDS | 4 GB | 2 | 40 GB | .40 | Detection intrusion reseau |
-| Windows Target 1 | 4 GB | 2 | 60 GB | .30 | Victime — alice.dupont |
-| Windows Target 2 | 4 GB | 2 | 60 GB | .31 | Victime — bob.admin |
-| Linux Target | 4 GB | 2 | 40 GB | .35 | Serveur SSH/Apache/FTP |
-| Kali Linux (Attaquant) | 8 GB | 4 | 80 GB | .50 | BloodHound, Metasploit, Mimikatz |
-| Forensics VM (DFIR) | 8 GB | 4 | 100 GB | .70 | Volatility, Autopsy, SIFT |
-| TOTAL | 52 GB | 22 | 660 GB | — | 7 machines virtuelles |
+### Tableau des VMs
+
+| VM | VLAN | IP | RAM | vCPU | Disque | Role |
+| --- | --- | --- | --- | --- | --- | --- |
+| pfSense 2.8.1 | ALL | .x.1 / 10.30.40.50 | 2 GB | 1 | 20 GB | Firewall / Router / NAT |
+| ELK Stack (SIEM) | 10 | 172.16.10.10 | 16 GB | 4 | 200 GB | Elasticsearch, Kibana, Logstash |
+| TheHive 5 + Cortex | 10 | 172.16.10.20 | 8 GB | 4 | 100 GB | Case management + Analyzers |
+| Suricata IDS | 10 | 172.16.10.40 | 4 GB | 2 | 40 GB | Detection intrusion reseau |
+| Velociraptor | 10 | 172.16.10.50 | 4 GB | 2 | 60 GB | Endpoint hunting + Forensics live |
+| Forensics SIFT | 10 | 172.16.10.70 | 8 GB | 4 | 100 GB | Volatility, Autopsy, SIFT |
+| OpenCTI | 10 | 172.16.10.80 | 8 GB | 4 | 80 GB | Threat Intel, IOC, ATT&CK Navigator |
+| AI / SOAR VM | 10 | 172.16.10.90 | 16 GB | 6 | 150 GB | Shuffle SOAR + Ollama Llama3 |
+| DC01 (Active Directory) | 20 | 172.16.20.10 | 4 GB | 2 | 80 GB | AD DS, DNS, Kerberos, lab.local |
+| WIN-TARGET-1 | 20 | 172.16.20.30 | 4 GB | 2 | 60 GB | alice.dupont — Sysmon + Winlogbeat |
+| WIN-TARGET-2 | 20 | 172.16.20.31 | 4 GB | 2 | 60 GB | bob.admin (DA) — Pass-the-Hash lab |
+| Linux Target | 30 | 172.16.30.10 | 4 GB | 2 | 40 GB | SSH, Apache, FTP — Elastic Agent |
+| Kali Linux | 99 | 172.16.99.10 | 8 GB | 4 | 80 GB | BloodHound, MSF, Mimikatz, Impacket |
+| **TOTAL** | — | — | **88 GB** | **41** | **1010 GB** | **13 machines** |
+
+### Tableau des VLANs (LAB-SWITCH)
+
+| Port Group | VLAN ID | Reseau | Role |
+| --- | --- | --- | --- |
+| MGMT-PG | 10 | 172.16.10.0/24 | Outils SOC, SIEM, Threat Hunting, AI |
+| CORP-PG | 20 | 172.16.20.0/24 | AD, cibles Windows |
+| DMZ-PG | 30 | 172.16.30.0/24 | Cible Linux exposee |
+| ATTACKER-PG | 99 | 172.16.99.0/24 | Machine attaquante Kali |
+| MONITOR-PG | 4095 | Aucune IP | NIC Suricata promiscueux |
+
+---
 
 # 2. Prerequis et Preparation
 
@@ -39,98 +62,193 @@ Avant de creer les VMs, configurer l'hyperviseur :
 
 - Acceder a l'interface ESXi : https://10.30.40.19 (IP Management)
 - Activer SSH sur l'hote ESXi pour la gestion a distance
-- Creer le vSwitch isole LAB-NET (172.16.10.0/24) SANS uplink physique
-- Creer un second vSwitch avec uplink pour l'acces Internet (ISO downloads uniquement)
-- Configurer le datastore : minimum 700 GB disponibles
-> IMPORTANT
-> vSwitch Isole
-> Le vSwitch LAB-NET ne doit JAMAIS avoir d'uplink physique.
-> Ceci garantit que les attaques simulees restent confinement dans le lab.
-> Les postes physiques accedent au lab via SSH et navigateur seulement.
+- Creer **vSwitch0** avec uplink vmnic0 → WAN-PG (acces reseau ecole)
+- Creer **vSwitch1 (LAB-SWITCH)** SANS uplink physique — mode promiscueux global
+- Creer les 5 Port Groups sur LAB-SWITCH : MGMT-PG (10), CORP-PG (20), DMZ-PG (30), ATTACKER-PG (99), MONITOR-PG (4095)
+- Configurer les datastores : minimum 1100 GB disponibles
+
+> **IMPORTANT — Securite vSwitch**
+> Le LAB-SWITCH ne doit JAMAIS avoir d'uplink physique.
+> Les attaques simulees restent confinement dans le lab.
+> Activer "Allow promiscuous mode" uniquement sur MONITOR-PG (VLAN 4095) pour Suricata.
 
 ## 2.2 ISOs et Licences Necessaires
 
 | Systeme | Version | Remarque |
 | --- | --- | --- |
+| pfSense | 2.8.1-RELEASE | netgate.com/downloads |
 | Windows Server 2022 | Evaluation 180j | ISO Microsoft Evaluation Center |
 | Windows 10 Pro | 22H2 ou superieur | ISO Microsoft — 2 licences |
 | Ubuntu Server 22.04 LTS | 22.04.x | ubuntu.com/download/server |
 | Kali Linux 2024.x | Latest | kali.org/get-kali — amd64 |
 | SIFT Workstation | Ubuntu 22.04 base | github.com/teamdfir/sift-saltstack |
 
-# 3. Phase 1 — Infrastructure de Base (Semaine 1-2)
+---
 
-## 3.1 Active Directory Domain Controller
+# 3. Phase 1 — pfSense Firewall / Router (Semaine 1)
+
+## 3.1 Installation pfSense (172.16.10.1 / WAN: 10.30.40.50)
+
+pfSense est la piece centrale du lab. Il route entre tous les VLANs et fournit le NAT vers le reseau de l'ecole.
+
+- Creer la VM : 2 GB RAM, 1 vCPU, 20 GB
+- Ajouter **6 interfaces reseau** : em0 (WAN-PG), em1 (MGMT-PG), em2 (CORP-PG), em3 (DMZ-PG), em4 (ATTACKER-PG), em5 (MONITOR-PG)
+- Installer pfSense 2.8.1 depuis l'ISO
+
+### Configuration des Interfaces
+
+Depuis la console pfSense (menu 2 — Set interface IP) :
+
+| Interface | Adaptateur | IP / Mode |
+| --- | --- | --- |
+| WAN | em0 | DHCP (recoit 10.30.40.50 du reseau ecole) |
+| LAN (MGMT) | em1 | 172.16.10.1/24 |
+| OPT1 (CORP) | em2 | 172.16.20.1/24 |
+| OPT2 (DMZ) | em3 | 172.16.30.1/24 |
+| OPT3 (ATTACKER) | em4 | 172.16.99.1/24 |
+| OPT4 (MONITOR) | em5 | Aucune IP |
+
+### Regles de Firewall pfSense
+
+Configurer dans WebUI (https://172.16.10.1) > Firewall > Rules :
+
+| Source | Destination | Port | Action | Commentaire |
+| --- | --- | --- | --- | --- |
+| VLAN 99 (Kali) | VLAN 20 CORP | Any | ALLOW | Simulation d'attaques |
+| VLAN 99 (Kali) | VLAN 30 DMZ | Any | ALLOW | Simulation d'attaques |
+| VLAN 99 (Kali) | WAN | Any | ALLOW | Telechargements outils |
+| VLAN 20/30 | VLAN 10 :5044 | TCP 5044 | ALLOW | Beats → Logstash |
+| VLAN 20/30 | VLAN 10 :8000 | TCP 8000 | ALLOW | Velociraptor agents |
+| VLAN 10 | VLAN 20/30 | Any | ALLOW | Acces analyste |
+| School | VLAN 10 :5601 | TCP 5601 | ALLOW | Kibana (NAT) |
+| School | VLAN 10 :9000 | TCP 9000 | ALLOW | TheHive (NAT) |
+| School | VLAN 10 :3001 | TCP 3001 | ALLOW | Shuffle SOAR (NAT) |
+| School | VLAN 10 :8080 | TCP 8080 | ALLOW | OpenCTI (NAT) |
+| School | VLAN 10 :8000 | TCP 8000 | ALLOW | Velociraptor (NAT) |
+| VLAN 20/30 | VLAN 99 | Any | **BLOCK** | Cibles ne peuvent atteindre attaquant |
+| VLAN 10 | WAN | Any | **BLOCK** | MGMT isole d'internet |
+
+### DHCP Servers (optionnel)
+
+Activer DHCP sur chaque interface VLAN pour les VMs si vous ne souhaitez pas configurer les IPs manuellement.
+
+---
+
+# 4. Phase 2 — Infrastructure de Base (Semaine 1-2)
+
+## 4.1 Active Directory Domain Controller (DC01 — 172.16.20.10)
 
 ### Installation Windows Server 2022
 
-- Creer la VM : 4 GB RAM, 2 vCPU, 80 GB — IP fixe 172.16.10.20
+- Creer la VM : 4 GB RAM, 2 vCPU, 80 GB — interface sur CORP-PG (VLAN 20)
 - Installer Windows Server 2022 (Desktop Experience recommande)
-- Configurer l'IP fixe dans les parametres reseau
+- Configurer l'IP fixe : 172.16.20.10 / 255.255.255.0 — Passerelle : 172.16.20.1 — DNS : 127.0.0.1
 
 ### Promotion en Controleur de Domaine
 
-### Creation des Utilisateurs et Comptes
+```powershell
+# Installer le role ADDS
+Install-WindowsFeature -Name AD-Domain-Services -IncludeManagementTools
 
-## 3.2 Windows Target 1 (alice.dupont — 172.16.10.30)
+# Promouvoir en DC (nouvelle foret)
+Install-ADDSForest `
+  -DomainName "lab.local" `
+  -DomainNetbiosName "LAB" `
+  -SafeModeAdministratorPassword (ConvertTo-SecureString "P@ssw0rd123!" -AsPlainText -Force) `
+  -InstallDns:$true `
+  -Force:$true
+```
 
-- Creer la VM : 4 GB RAM, 2 vCPU, 60 GB
-- Installer Windows 10 Pro, IP fixe 172.16.10.30, DNS vers 172.16.10.20
-- Joindre le domaine lab.local
+### Creation des Comptes et SPNs Vulnerables
 
-- Ouvrir des ports et services vulnerables pour les scenarios d'attaque
-- Installer Sysmon + Winlogbeat (voir section 4)
-## 3.3 Windows Target 2 (bob.admin — 172.16.10.31)
+```powershell
+# Creer les utilisateurs du domaine
+New-ADUser -Name "alice.dupont" -SamAccountName "alice.dupont" -AccountPassword (ConvertTo-SecureString "Password123" -AsPlainText -Force) -Enabled $true -PasswordNeverExpires $true
+New-ADUser -Name "bob.admin" -SamAccountName "bob.admin" -AccountPassword (ConvertTo-SecureString "Admin@123" -AsPlainText -Force) -Enabled $true -PasswordNeverExpires $true
+
+# Ajouter bob.admin en tant que Domain Admin
+Add-ADGroupMember -Identity "Domain Admins" -Members "bob.admin"
+
+# Creer un compte de service avec SPN (vulnerable Kerberoasting)
+New-ADUser -Name "svc_sql" -SamAccountName "svc_sql" -AccountPassword (ConvertTo-SecureString "Service123!" -AsPlainText -Force) -Enabled $true
+Set-ADUser -Identity "svc_sql" -ServicePrincipalNames @{Add="MSSQLSvc/dc01.lab.local:1433"}
+
+# Configurer les GPO Sysmon/Winlogbeat (voir section 5.2)
+```
+
+## 4.2 Windows Target 1 (alice.dupont — 172.16.20.30)
+
+- Creer la VM : 4 GB RAM, 2 vCPU, 60 GB — interface sur CORP-PG (VLAN 20)
+- Installer Windows 10 Pro — IP fixe 172.16.20.30 — DNS : 172.16.20.10
+- Joindre le domaine lab.local avec le compte alice.dupont
+- Installer Sysmon + Winlogbeat (voir section 5)
+- Installer l'agent Velociraptor (voir section 9.2)
+
+## 4.3 Windows Target 2 (bob.admin — 172.16.20.31)
 
 Configuration identique a Target 1, avec le compte bob.admin (Domain Admin). Ce poste simule un mouvement lateral apres compromission initiale.
 
-- Creer la VM : 4 GB RAM, 2 vCPU, 60 GB
-- Installer Windows 10 Pro, IP fixe 172.16.10.31
+- Creer la VM : 4 GB RAM, 2 vCPU, 60 GB — interface sur CORP-PG (VLAN 20)
+- Installer Windows 10 Pro — IP fixe 172.16.20.31
 - Joindre le domaine, connecter avec bob.admin
 - Conserver des artefacts d'authentification pour les scenarios Pass-the-Hash
-## 3.4 Linux Target (172.16.10.35)
 
-# 4. Phase 2 — ELK Stack SIEM (Semaine 2-3)
+## 4.4 Linux Target (172.16.30.10)
 
-## 4.1 Installation ELK Stack (172.16.10.10)
-
-L'ELK Stack est le coeur du SOC. Elle centralise tous les logs et fournit la detection d'alertes via Elastic Security.
-
-### Prerequis Systeme
-
-Connectez-vous en SSH sur la VM ELK (Ubuntu Server 22.04, IP : 172.16.10.10) :
+- Creer la VM : 4 GB RAM, 2 vCPU, 40 GB — interface sur DMZ-PG (VLAN 30)
+- Installer Ubuntu Server 22.04 — IP fixe 172.16.30.10 — Passerelle : 172.16.30.1
 
 ```bash
-# Mise a jour du systeme
-sudo apt update && sudo apt upgrade -y
+# Installer les services exposes (vulnerables)
+sudo apt update && sudo apt install -y openssh-server apache2 vsftpd
 
-# Installation des dependances
-sudo apt install -y apt-transport-https ca-certificates curl gnupg lsb-release wget
+# Configurer SSH avec authentification par mot de passe (lab uniquement)
+sudo sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config
+sudo systemctl restart ssh
+
+# Creer un utilisateur faible pour les scenarios brute-force
+sudo useradd -m -s /bin/bash labuser
+echo "labuser:password123" | sudo chpasswd
+
+# Configurer vsftpd
+sudo sed -i 's/anonymous_enable=NO/anonymous_enable=YES/' /etc/vsftpd.conf
+sudo systemctl enable vsftpd && sudo systemctl start vsftpd
+
+# Installer Elastic Agent (voir section 5.4)
+# Installer Velociraptor agent (voir section 9.2)
+```
+
+---
+
+# 5. Phase 3 — ELK Stack SIEM (Semaine 2-3)
+
+## 5.1 Installation ELK Stack (172.16.10.10)
+
+L'ELK Stack est le coeur du SOC. Elle centralise tous les logs et fournit la detection via Elastic Security.
+
+### Prerequisites Systeme
+
+```bash
+# Mise a jour du systeme (Ubuntu Server 22.04)
+sudo apt update && sudo apt upgrade -y
+sudo apt install -y apt-transport-https ca-certificates curl gnupg wget
 
 # Ajouter la cle GPG Elastic
 wget -qO - https://artifacts.elastic.co/GPG-KEY-elasticsearch | sudo gpg --dearmor -o /usr/share/keyrings/elasticsearch-keyring.gpg
 
 # Ajouter le depot Elastic 8.x
 echo "deb [signed-by=/usr/share/keyrings/elasticsearch-keyring.gpg] https://artifacts.elastic.co/packages/8.x/apt stable main" | sudo tee /etc/apt/sources.list.d/elastic-8.x.list
-
-# Mettre a jour les paquets
 sudo apt update
 ```
 
 ### Installation Elasticsearch
 
 ```bash
-# Installer Elasticsearch
 sudo apt install -y elasticsearch
 
-# Conserver le mot de passe superuser affiche a l'installation !
-# Il sera necessaire pour la configuration de Kibana.
-
-# Configurer Elasticsearch
+# Configurer /etc/elasticsearch/elasticsearch.yml
 sudo nano /etc/elasticsearch/elasticsearch.yml
 ```
-
-Modifier les parametres suivants dans `elasticsearch.yml` :
 
 ```yaml
 cluster.name: soc-lab
@@ -139,33 +257,21 @@ network.host: 172.16.10.10
 http.port: 9200
 discovery.type: single-node
 xpack.security.enabled: true
-xpack.security.http.ssl.enabled: false   # Pour le lab uniquement
+xpack.security.http.ssl.enabled: false   # Lab uniquement
 ```
 
 ```bash
-# Activer et demarrer Elasticsearch
 sudo systemctl daemon-reload
-sudo systemctl enable elasticsearch
-sudo systemctl start elasticsearch
-
-# Verifier le statut
-sudo systemctl status elasticsearch
-
-# Tester la connexion (remplacer MOT_DE_PASSE par le mot de passe genere)
-curl -u elastic:MOT_DE_PASSE http://172.16.10.10:9200
+sudo systemctl enable --now elasticsearch
+# Tester : curl -u elastic:MOT_DE_PASSE http://172.16.10.10:9200
 ```
 
 ### Installation Kibana
 
 ```bash
-# Installer Kibana
 sudo apt install -y kibana
-
-# Configurer Kibana
 sudo nano /etc/kibana/kibana.yml
 ```
-
-Modifier les parametres suivants dans `kibana.yml` :
 
 ```yaml
 server.port: 5601
@@ -173,38 +279,23 @@ server.host: "172.16.10.10"
 server.name: "soc-kibana"
 elasticsearch.hosts: ["http://172.16.10.10:9200"]
 elasticsearch.username: "kibana_system"
-# elasticsearch.password: sera defini apres
+# elasticsearch.password: "LE_MOT_DE_PASSE_ICI"
 ```
 
 ```bash
-# Generer un token d'enrollment Kibana depuis Elasticsearch
+# Generer un token enrollment pour Kibana
 sudo /usr/share/elasticsearch/bin/elasticsearch-create-enrollment-token -s kibana
-
-# Definir le mot de passe du compte kibana_system
 sudo /usr/share/elasticsearch/bin/elasticsearch-reset-password -u kibana_system
-# Copier le mot de passe genere et l'ajouter dans kibana.yml :
-# elasticsearch.password: "LE_MOT_DE_PASSE_ICI"
-
-# Activer et demarrer Kibana
-sudo systemctl enable kibana
-sudo systemctl start kibana
-
-# Verifier le statut
-sudo systemctl status kibana
-# Interface accessible sur http://172.16.10.10:5601
+sudo systemctl enable --now kibana
+# Interface : http://172.16.10.10:5601
 ```
 
 ### Installation Logstash
 
 ```bash
-# Installer Logstash
 sudo apt install -y logstash
-
-# Creer le pipeline de configuration principal
 sudo nano /etc/logstash/conf.d/beats-input.conf
 ```
-
-Contenu du fichier `beats-input.conf` :
 
 ```
 input {
@@ -216,14 +307,13 @@ input {
 
 filter {
   if [agent][type] == "winlogbeat" {
-    mutate {
-      add_tag => ["windows", "winlogbeat"]
-    }
+    mutate { add_tag => ["windows", "winlogbeat"] }
   }
   if [agent][type] == "filebeat" {
-    mutate {
-      add_tag => ["linux", "filebeat"]
-    }
+    mutate { add_tag => ["linux", "filebeat"] }
+  }
+  if "suricata" in [tags] {
+    mutate { add_tag => ["ids", "suricata"] }
   }
 }
 
@@ -234,88 +324,52 @@ output {
     password => "MOT_DE_PASSE_ELASTIC"
     index => "logs-%{[agent][type]}-%{+YYYY.MM.dd}"
   }
-  stdout { codec => rubydebug }
 }
 ```
 
 ```bash
-# Tester la configuration Logstash
-sudo /usr/share/logstash/bin/logstash --config.test_and_exit -f /etc/logstash/conf.d/
+sudo systemctl enable --now logstash
 
-# Activer et demarrer Logstash
-sudo systemctl enable logstash
-sudo systemctl start logstash
-
-# Verifier le statut
-sudo systemctl status logstash
-
-# Verifier que le port 5044 est ouvert
-ss -tlnp | grep 5044
-```
-
-```bash
-# Ouvrir les ports dans le firewall (UFW)
-sudo ufw allow 9200/tcp   # Elasticsearch API
+# Ouvrir les ports UFW
+sudo ufw allow 9200/tcp   # Elasticsearch
 sudo ufw allow 5601/tcp   # Kibana
-sudo ufw allow 5044/tcp   # Logstash Beats input
+sudo ufw allow 5044/tcp   # Logstash Beats
 sudo ufw enable
-sudo ufw status
 ```
 
-## 4.2 Installation Sysmon sur Windows (Targets 1 et 2)
+## 5.2 Installation Sysmon sur Windows (Targets 1 et 2)
 
-Sysmon enrichit les logs Windows avec des evenements critiques pour la detection d'attaques.
-
-> Events Sysmon Importants a Monitorer
-> Event ID 1 
-> Process Creation (detection d'outils offensifs)
-> Event ID 3 
-> Network Connection (lateral movement)
-> Event ID 7 
-> Image Loaded (DLL injection)
-> Event ID 10
-> Process Access (Mimikatz, LSASS dumping)
-> Event ID 11
-> File Created (malware dropped)
-> Event ID 22
-> DNS Query (C2 beaconing)
-
-Sur chaque machine Windows Target (Target 1 — alice.dupont et Target 2 — bob.admin), ouvrir PowerShell en tant qu'Administrateur :
+> **Events Sysmon Critiques**
+> - Event ID 1 — Process Creation (outils offensifs)
+> - Event ID 3 — Network Connection (lateral movement)
+> - Event ID 7 — Image Loaded (DLL injection)
+> - Event ID 10 — Process Access (Mimikatz, LSASS dump)
+> - Event ID 11 — File Created (malware dropped)
+> - Event ID 22 — DNS Query (C2 beaconing)
 
 ```powershell
-# Telecharger Sysmon depuis Sysinternals
+# Sur chaque Windows Target — PowerShell Administrateur
 Invoke-WebRequest -Uri "https://download.sysinternals.com/files/Sysmon.zip" -OutFile "C:\Tools\Sysmon.zip"
 Expand-Archive -Path "C:\Tools\Sysmon.zip" -DestinationPath "C:\Tools\Sysmon"
 
-# Telecharger la configuration Sysmon recommandee (SwiftOnSecurity)
+# Telecharger la config SwiftOnSecurity
 Invoke-WebRequest -Uri "https://raw.githubusercontent.com/SwiftOnSecurity/sysmon-config/master/sysmonconfig-export.xml" -OutFile "C:\Tools\Sysmon\sysmonconfig.xml"
 
-# Installer Sysmon avec la configuration
+# Installer Sysmon
 cd C:\Tools\Sysmon
 .\Sysmon64.exe -accepteula -i sysmonconfig.xml
-
-# Verifier que Sysmon est bien installe et actif
 Get-Service Sysmon64
-
-# Verifier les logs dans l'Observateur d'evenements
-# Applications and Services Logs > Microsoft > Windows > Sysmon > Operational
 ```
 
-## 4.3 Installation Winlogbeat (Windows → Logstash)
-
-Sur chaque machine Windows Target, ouvrir PowerShell en tant qu'Administrateur :
+## 5.3 Installation Winlogbeat (Windows → Logstash)
 
 ```powershell
 # Telecharger Winlogbeat 8.x
 Invoke-WebRequest -Uri "https://artifacts.elastic.co/downloads/beats/winlogbeat/winlogbeat-8.13.0-windows-x86_64.zip" -OutFile "C:\Tools\winlogbeat.zip"
 Expand-Archive -Path "C:\Tools\winlogbeat.zip" -DestinationPath "C:\Program Files\Winlogbeat"
 cd "C:\Program Files\Winlogbeat\winlogbeat-8.13.0-windows-x86_64"
-
-# Editer la configuration Winlogbeat
 notepad winlogbeat.yml
 ```
-
-Contenu de `winlogbeat.yml` :
 
 ```yaml
 winlogbeat.event_logs:
@@ -339,67 +393,62 @@ logging.files:
 ```
 
 ```powershell
-# Tester la configuration
 .\winlogbeat.exe test config -c winlogbeat.yml -e
-
-# Tester la connexion vers Logstash
-.\winlogbeat.exe test output -c winlogbeat.yml
-
-# Installer Winlogbeat comme service Windows
 .\install-service-winlogbeat.ps1
-
-# Demarrer le service
 Start-Service winlogbeat
-Get-Service winlogbeat
-
-# Verifier les logs de Winlogbeat
-Get-Content "C:\ProgramData\winlogbeat\Logs\winlogbeat" -Tail 20
 ```
 
-# 5. Phase 3 — Suricata IDS Reseau (Semaine 3)
-
-## 5.1 Installation Suricata (172.16.10.40)
-
-Suricata analyse le trafic reseau en mode NIC promiscueux pour detecter les attaques reseau (scan, brute-force, exploitation).
+## 5.4 Installation Elastic Agent sur Linux Target
 
 ```bash
-# Installer Suricata sur Ubuntu/Debian
+# Sur la VM Linux Target (172.16.30.10)
+curl -L -O https://artifacts.elastic.co/downloads/beats/elastic-agent/elastic-agent-8.13.0-linux-x86_64.tar.gz
+tar xzvf elastic-agent-8.13.0-linux-x86_64.tar.gz
+cd elastic-agent-8.13.0-linux-x86_64
+
+# Installer et connecter a ELK Fleet (ou directement Logstash)
+sudo ./elastic-agent install \
+  --url=https://172.16.10.10:8220 \
+  --enrollment-token=TOKEN_ICI
+
+# Activer auditd pour la collecte des evenements systeme
+sudo apt install -y auditd
+sudo systemctl enable --now auditd
+```
+
+---
+
+# 6. Phase 4 — Suricata IDS Reseau (Semaine 3)
+
+## 6.1 Installation Suricata (172.16.10.40)
+
+Suricata analyse tout le trafic inter-VLAN via la NIC connectee a MONITOR-PG (VLAN 4095 — mode promiscueux).
+
+```bash
 sudo add-apt-repository ppa:oisf/suricata-stable
-sudo apt update
-sudo apt install -y suricata
+sudo apt update && sudo apt install -y suricata
 
-# Verifier la version
-suricata --build-info
+# Identifier la NIC de monitoring (celle sur MONITOR-PG)
+ip a   # ex: ens36
 
-# Identifier l'interface reseau a surveiller
-ip a
-# Exemple : ens33
-
-# Configurer Suricata
+# Configurer /etc/suricata/suricata.yaml
 sudo nano /etc/suricata/suricata.yaml
 ```
 
-**Extraits cles de `/etc/suricata/suricata.yaml` :**
-
 ```yaml
-# Interface reseau
 af-packet:
-  - interface: ens33
+  - interface: ens36
     cluster-id: 99
     cluster-type: cluster_flow
     defrag: yes
 
-# Repertoire des regles
-default-rule-path: /var/lib/suricata/rules
+vars:
+  address-groups:
+    HOME_NET: "[172.16.0.0/16]"
 
-rule-files:
-  - suricata.rules
-
-# Sortie EVE JSON (pour Filebeat)
 outputs:
   - eve-log:
       enabled: yes
-      filetype: regular
       filename: /var/log/suricata/eve.json
       types:
         - alert
@@ -411,58 +460,45 @@ outputs:
 ```
 
 ```bash
-# Mettre a jour les regles Suricata (Emerging Threats)
-sudo suricata-update
-
-# Tester la configuration
+sudo suricata-update   # Mettre a jour les regles Emerging Threats
 sudo suricata -T -c /etc/suricata/suricata.yaml -v
-
-# Activer et demarrer Suricata
-sudo systemctl enable suricata
-sudo systemctl start suricata
-sudo systemctl status suricata
-
-# Verifier les logs en temps reel
-sudo tail -f /var/log/suricata/eve.json | python3 -m json.tool
-sudo tail -f /var/log/suricata/fast.log
+sudo systemctl enable --now suricata
 ```
 
-### Regles de Detection
+### Regles de Detection Personnalisees
 
 ```bash
-# Ajouter des regles personnalisees
 sudo nano /etc/suricata/rules/local.rules
 ```
 
 ```text
-# Detection scan Nmap
+# Nmap SYN Scan
 alert tcp any any -> $HOME_NET any (msg:"NMAP SYN Scan"; flags:S,12; threshold: type threshold, track by_src, count 20, seconds 5; sid:1000001; rev:1;)
 
-# Detection brute force SSH
+# Brute Force SSH
 alert tcp any any -> $HOME_NET 22 (msg:"SSH Brute Force Attempt"; flow:to_server; threshold: type threshold, track by_src, count 10, seconds 30; sid:1000002; rev:1;)
 
-# Detection Kerberoasting (TGS-REQ RC4)
+# Kerberoasting (TGS-REQ RC4)
 alert dns any any -> any any (msg:"Possible Kerberoasting - TGS RC4"; content:"|17 00|"; sid:1000003; rev:1;)
 
-# Detection Pass-the-Hash SMB
+# Pass-the-Hash SMB
 alert smb any any -> $HOME_NET 445 (msg:"Possible Pass-the-Hash SMB"; flow:to_server,established; sid:1000004; rev:1;)
+
+# BloodHound LDAP Recon
+alert tcp any any -> $HOME_NET 389 (msg:"LDAP Recon - BloodHound"; threshold: type threshold, track by_src, count 50, seconds 10; sid:1000005; rev:1;)
 ```
 
 ```bash
-# Ajouter le fichier local.rules dans suricata.yaml
-# Puis recharger les regles sans redemarrage
-sudo kill -USR2 $(pidof suricata)
+sudo kill -USR2 $(pidof suricata)   # Recharger les regles sans arret
 ```
 
 ### Integration Suricata → ELK via Filebeat
 
 ```bash
-# Installer Filebeat sur la VM Suricata
 curl -fsSL https://artifacts.elastic.co/GPG-KEY-elasticsearch | sudo gpg --dearmor -o /usr/share/keyrings/elastic.gpg
 echo "deb [signed-by=/usr/share/keyrings/elastic.gpg] https://artifacts.elastic.co/packages/8.x/apt stable main" | sudo tee /etc/apt/sources.list.d/elastic-8.x.list
 sudo apt update && sudo apt install -y filebeat
 
-# Activer le module Suricata
 sudo filebeat modules enable suricata
 sudo nano /etc/filebeat/modules.d/suricata.yml
 ```
@@ -475,190 +511,601 @@ sudo nano /etc/filebeat/modules.d/suricata.yml
 ```
 
 ```bash
-# Configurer Filebeat pour envoyer vers Logstash
 sudo nano /etc/filebeat/filebeat.yml
 ```
 
 ```yaml
 output.logstash:
-  hosts: ["172.16.10.11:5044"]
-
+  hosts: ["172.16.10.10:5044"]
 setup.kibana:
-  host: "172.16.10.11:5601"
+  host: "172.16.10.10:5601"
 ```
 
 ```bash
-# Demarrer Filebeat
-sudo systemctl enable filebeat
-sudo systemctl start filebeat
-sudo systemctl status filebeat
+sudo systemctl enable --now filebeat
 ```
 
 ---
 
-# 6. Phase 4 — Machine Attaquante Kali Linux (Semaine 3-4)
+# 7. Phase 5 — Machine Attaquante Kali Linux (Semaine 3-4)
 
-La machine Kali Linux (172.16.10.50) simule un attaquant interne ou externe ayant un acces au reseau du lab.
+La machine Kali Linux (172.16.99.10) est sur VLAN 99 — completement isolee des outils de defense.
 
-## 6.1 Installation et Configuration Kali
+## 7.1 Installation et Configuration Kali
+
+- Creer la VM : 8 GB RAM, 4 vCPU, 80 GB — interface sur ATTACKER-PG (VLAN 99)
+- IP fixe : 172.16.99.10 — Passerelle : 172.16.99.1
 
 ```bash
-# Mise a jour complete du systeme Kali
 sudo apt update && sudo apt full-upgrade -y
 
-# Installer les outils necessaires pour les scenarios
 sudo apt install -y \
-  nmap \
-  hydra \
-  crackmapexec \
-  impacket-scripts \
-  bloodhound \
-  neo4j \
-  mimikatz \
-  smbclient \
-  python3-bloodhound
+  nmap hydra crackmapexec impacket-scripts \
+  bloodhound neo4j smbclient python3-bloodhound \
+  evil-winrm john hashcat metasploit-framework
 
-# Configurer le fichier /etc/hosts pour resoudre lab.local
-echo "172.16.10.20  dc01.lab.local  lab.local" | sudo tee -a /etc/hosts
-echo "172.16.10.30  srv-win.lab.local" | sudo tee -a /etc/hosts
-echo "172.16.10.35  srv-linux.lab.local" | sudo tee -a /etc/hosts
+# Configurer /etc/hosts pour resoudre lab.local
+echo "172.16.20.10  dc01.lab.local  lab.local" | sudo tee -a /etc/hosts
+echo "172.16.20.30  win01.lab.local" | sudo tee -a /etc/hosts
+echo "172.16.20.31  win02.lab.local" | sudo tee -a /etc/hosts
+echo "172.16.30.10  linux01.lab.local" | sudo tee -a /etc/hosts
 
-# Verifier la connectivite reseau
-ping -c 3 172.16.10.20
-nmap -sn 172.16.10.0/24
+# Verifier la connectivite via pfSense
+ping -c 3 172.16.20.10   # DC01
+ping -c 3 172.16.30.10   # Linux Target
 ```
 
-## 6.2 Scenarios d'Attaques a Implementer
+## 7.2 Scenarios d'Attaques
 
-> Scenario 1
-> Reconnaissance Initiale
-> Objectif : Cartographier le domaine AD depuis Kali
-> Outil    : BloodHound + SharpHound collector
-> Commande : nmap -sV -sC 172.16.10.0/24  (decouverte reseau)
-> bloodhound-python -u alice.dupont -p Password123 -d lab.local -ns 172.16.10.20 --zip
+> **Scenario 1 — Reconnaissance Initiale**
+> - Objectif : Cartographier le domaine AD
+> - Outils : Nmap, BloodHound
+> - `nmap -sV -sC 172.16.20.0/24`
+> - `bloodhound-python -u alice.dupont -p Password123 -d lab.local -ns 172.16.20.10 --zip`
+> - Detection : Suricata alert (LDAP recon) + Event ID 4662
 
-> Scenario 2
-> Kerberoasting
-> Objectif : Extraire et cracker les tickets Kerberos des comptes de service
-> Outil    : Impacket GetUserSPNs.py
-> Commande : GetUserSPNs.py lab.local/alice.dupont:Password123 -dc-ip 172.16.10.20 -request
-> Detection : Event ID 4769 (TGS-REQ avec chiffrement RC4) sur le DC
+> **Scenario 2 — Kerberoasting**
+> - Objectif : Extraire et cracker les tickets Kerberos des comptes de service
+> - Outils : Impacket GetUserSPNs.py
+> - `GetUserSPNs.py lab.local/alice.dupont:Password123 -dc-ip 172.16.20.10 -request`
+> - `hashcat -m 13100 hash.txt /usr/share/wordlists/rockyou.txt`
+> - Detection : Event ID 4769 (TGS-REQ RC4) sur DC01
 
-> Scenario 3
-> Pass-the-Hash
-> Objectif : Se connecter avec le hash NTLM sans connaitre le mot de passe
-> Outil    : Mimikatz + CrackMapExec
-> Commande : mimikatz # sekurlsa::logonpasswords
-> crackmapexec smb 172.16.10.31 -u bob.admin -H <hash_ntlm>
-> Detection : Event ID 4624 (Logon Type 3) + Sysmon Event 10 (LSASS access)
+> **Scenario 3 — Pass-the-Hash**
+> - Objectif : Se connecter avec le hash NTLM sans le mot de passe
+> - Outils : Mimikatz + CrackMapExec
+> - `mimikatz # sekurlsa::logonpasswords`
+> - `crackmapexec smb 172.16.20.31 -u bob.admin -H <hash_ntlm>`
+> - Detection : Event ID 4624 (Logon Type 3) + Sysmon Event 10 (LSASS access)
 
-> Scenario 4
-> Brute Force SSH/SMB
-> Objectif : Tester la resilience des mots de passe
-> Outils   : Hydra, Nmap scripts
-> Commande : hydra -l alice.dupont -P /usr/share/wordlists/rockyou.txt ssh://172.16.10.35
-> hydra -l Administrator -P wordlist.txt smb://172.16.10.30
-> Detection : Suricata alertes + Event ID 4625 (echecs de connexion)
+> **Scenario 4 — Brute Force SSH/SMB**
+> - Objectif : Tester la resilience des mots de passe
+> - Outils : Hydra, Nmap scripts
+> - `hydra -l labuser -P /usr/share/wordlists/rockyou.txt ssh://172.16.30.10`
+> - `hydra -l Administrator -P wordlist.txt smb://172.16.20.30`
+> - Detection : Suricata alertes + Event ID 4625 (echecs connexion)
 
-# 7. Phase 5 — Forensics VM / DFIR (Semaine 4-5)
+> **Scenario 5 — Lateral Movement (Evil-WinRM)**
+> - Objectif : Obtenir un shell distant apres compromission
+> - Outils : Evil-WinRM
+> - `evil-winrm -i 172.16.20.31 -u bob.admin -p Admin@123`
+> - Detection : Event ID 4624 + Sysmon Event 3/22
 
-## 7.1 Installation SIFT Workstation (172.16.10.70)
+---
 
-## 7.2 Acquisition de Preuves via Snapshots VMware
+# 8. Phase 6 — Forensics VM / DFIR (Semaine 4)
 
-La VM Forensics peut analyser directement les fichiers VMDK des autres VMs. C'est l'avantage majeur d'un lab virtuel.
+## 8.1 Installation SIFT Workstation (172.16.10.70)
 
-## 7.3 Analyse Forensique avec Volatility 3
+- Creer la VM : 8 GB RAM, 4 vCPU, 100 GB — interface sur MGMT-PG (VLAN 10)
+- Installer Ubuntu Server 22.04 — IP fixe 172.16.10.70
 
-## 7.4 Analyse des Logs Windows avec Autopsy
+```bash
+# Installer SIFT via script officiel SANS
+sudo apt update && sudo apt install -y git
+git clone https://github.com/teamdfir/sift-saltstack sift-saltstack
+cd sift-saltstack
+sudo ./install.sh
+# Outils installes : Volatility 3, Autopsy, Plaso/log2timeline, Sleuth Kit, Wireshark
+```
 
-- Ouvrir Autopsy : sudo autopsy
-- Creer un nouveau cas : File > New Case
-- Ajouter une source de donnees : Image ou disque local
-- Analyser les artefacts : Prefetch, LNK files, Registry hives, Event Logs
-- Generer un rapport timeline avec log2timeline / plaso
+## 8.2 Acquisition de Preuves via Snapshots VMware
 
-# 8. Configuration Elastic Security (Detection SIEM)
+```bash
+# Depuis ESXi, prendre un snapshot d'une VM compromise
+# Monter le VMDK sur la VM Forensics via SSH/SCP
+# Exemple : monter le VMDK de WIN-TARGET-1
+sudo mkdir /mnt/evidence
+sudo mount -o ro /dev/sdb1 /mnt/evidence   # adapter selon le disque
+```
 
-## 8.1 Activation d'Elastic Security dans Kibana
+## 8.3 Analyse Memoire avec Volatility 3
 
-- Ouvrir Kibana : http://172.16.10.10:5601
-- Aller dans Menu > Security > Overview
-- Activer Elastic Security et les regles de detection prebaties
-- Importer les Detection Rules pour Active Directory :
+```bash
+# Creer un dump memoire depuis ESXi (snapshot .vmem)
+# Transporter le fichier .vmem vers la VM Forensics
 
-## 8.2 Regles de Detection Critiques a Activer
+# Analyser avec Volatility 3
+vol -f memory.vmem windows.pslist.PsList
+vol -f memory.vmem windows.netscan.NetScan
+vol -f memory.vmem windows.cmdline.CmdLine
+vol -f memory.vmem windows.lsadump.Lsadump   # Credentials LSASS
+vol -f memory.vmem windows.malfind.Malfind    # Code inject
+```
 
-| Regle | Event IDs | Attaque Detectee |
-| --- | --- | --- |
-| Kerberoasting Activity | 4769 | Extraction tickets Kerberos RC4 |
-| LSASS Memory Read | Sysmon 10 | Dumping credentials (Mimikatz) |
-| Pass-the-Hash | 4624 Type 3 | Utilisation hash NTLM |
-| Brute Force Login | 4625 x10+ | Attaque par force brute |
-| Lateral Movement SMB | 4648 + Sysmon 3 | Mouvement lateral |
-| BloodHound Recon | 4662 + LDAP queries | Enumeration AD |
-| Evil-WinRM Connection | 4624 + Sysmon 3/22 | Remote shell via WinRM |
+## 8.4 Analyse Timeline avec Plaso / log2timeline
 
-## 8.3 Dashboards Kibana Recommandes
+```bash
+# Creer une timeline complete du disque
+log2timeline.py --storage-file timeline.plaso /mnt/evidence
 
-- Security Overview : vue globale des alertes par severite
-- Windows Security Events : analyse des Event IDs critiques (4624, 4625, 4768, 4769, 4672)
-- Sysmon Dashboard : processus, connexions reseau, acces LSASS
-- Suricata Alerts : alertes IDS reseau par categorie et IP source
-- DFIR Timeline : reconstruction chronologique des evenements
-# 9. Checklist d'Implementation
+# Analyser avec psort
+psort.py -z UTC -o l2tcsv timeline.plaso > timeline.csv
 
-Utilisez cette checklist pour suivre l'avancement du projet :
+# Filtrer les evenements suspects
+grep -i "mimikatz\|lsass\|psexec" timeline.csv
+```
 
-|  | Tache | Priorite | Statut |
+---
+
+# 9. Phase 7 — Threat Hunting (Semaine 5)
+
+## 9.1 Velociraptor Server (172.16.10.50)
+
+Velociraptor permet la chasse aux menaces en temps reel sur tous les endpoints du lab.
+
+```bash
+# Sur la VM Velociraptor (Ubuntu 22.04) — IP 172.16.10.50
+wget https://github.com/Velocidex/velociraptor/releases/download/v0.7.0/velociraptor-v0.7.0-linux-amd64
+chmod +x velociraptor-v0.7.0-linux-amd64
+sudo mv velociraptor-v0.7.0-linux-amd64 /usr/local/bin/velociraptor
+
+# Generer la configuration serveur
+velociraptor config generate -i
+# Repondre aux questions : frontend IP = 172.16.10.50, port = 8000
+
+# Creer un paquet installeur pour les agents clients
+velociraptor --config server.config.yaml debian client
+
+# Demarrer le serveur
+velociraptor --config server.config.yaml frontend &
+
+# Interface web : https://172.16.10.50:8000
+```
+
+## 9.2 Deploiement des Agents Velociraptor
+
+```bash
+# Sur chaque machine cible (VLAN 20 et 30)
+# Copier le paquet .deb (Linux) ou .msi (Windows) genere ci-dessus
+
+# Linux Target
+sudo dpkg -i velociraptor_client.deb
+sudo systemctl enable --now velociraptor_client
+
+# Windows Targets (PowerShell Admin)
+msiexec /i velociraptor_client.msi /quiet
+```
+
+## 9.3 Hunts VQL (Velociraptor Query Language)
+
+```sql
+-- Lister tous les processus actifs sur tous les endpoints
+SELECT Name, Pid, Ppid, CommandLine, Username
+FROM pslist()
+ORDER BY Name
+
+-- Rechercher des connexions reseau suspectes
+SELECT Laddr, Lport, Raddr, Rport, Status, Pid
+FROM netstat()
+WHERE Raddr != "0.0.0.0" AND Raddr != "::"
+
+-- Chercher des fichiers Mimikatz ou outils offensifs
+SELECT FullPath, Size, Mtime, Hash.MD5
+FROM glob(globs="C:\\**\\mimikatz*", accessor="file")
+
+-- Rechercher des persistances (Run keys)
+SELECT Key, Name, Data
+FROM read_reg_key(globs="HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run\\**")
+```
+
+## 9.4 Integration Sigma Rules dans ELK
+
+Sigma Rules fournit des regles de detection generiques mappees MITRE ATT&CK.
+
+```bash
+# Sur la VM ELK
+pip3 install sigmatools
+
+# Telecharger les regles Sigma
+git clone https://github.com/SigmaHQ/sigma.git /opt/sigma
+
+# Convertir une regle Sigma en requete Elasticsearch
+sigma convert -t es-qs -p ecs_windows \
+  /opt/sigma/rules/windows/process_creation/proc_creation_win_mimikatz_command_line.yml
+
+# Resultat : requete KQL a copier dans Kibana Detection Engine
+# Exemple output : process.command_line:(*sekurlsa* OR *lsadump* OR *privilege::debug*)
+```
+
+## 9.5 OpenCTI — Threat Intelligence Platform (172.16.10.80)
+
+```bash
+# Sur la VM OpenCTI (Ubuntu 22.04) — IP 172.16.10.80
+# Installer Docker
+sudo apt install -y docker.io docker-compose
+
+# Cloner le depot OpenCTI
+git clone https://github.com/OpenCTI-Platform/docker.git /opt/opencti
+cd /opt/opencti
+
+# Configurer .env (definir les mots de passe, UUID)
+cp .env.sample .env
+nano .env
+# OPENCTI_ADMIN_EMAIL=admin@opencti.io
+# OPENCTI_ADMIN_PASSWORD=votre_mot_de_passe
+# OPENCTI_ADMIN_TOKEN=uuid-genere
+
+docker-compose up -d
+# Interface : http://172.16.10.80:8080
+
+# ATT&CK Navigator (container supplementaire)
+docker run -d -p 4242:80 --name attack-navigator \
+  ghcr.io/mitre-attack/attack-navigator:latest
+# Interface : http://172.16.10.80:4242
+```
+
+### Import du framework MITRE ATT&CK dans OpenCTI
+
+```
+1. Aller dans Settings > Connectors
+2. Activer le connecteur "MITRE ATT&CK"
+3. Lancer l'import (environ 10 minutes)
+4. Les techniques sont maintenant disponibles pour le tagging des cas TheHive
+```
+
+---
+
+# 10. Phase 8 — TheHive 5 + Cortex (Semaine 5-6)
+
+## 10.1 Installation TheHive 5 (172.16.10.20)
+
+TheHive gere les cas d'incidents. Cortex execute des analyseurs automatises (VirusTotal, reputation IP, etc.).
+
+```bash
+# Sur la VM TheHive (Ubuntu 22.04) — IP 172.16.10.20
+sudo apt install -y docker.io docker-compose
+
+# Creer docker-compose.yml
+mkdir /opt/thehive && cd /opt/thehive
+nano docker-compose.yml
+```
+
+```yaml
+version: "3.8"
+services:
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.17.9
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms1g -Xmx1g"
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+
+  thehive:
+    image: strangebee/thehive:5-latest
+    depends_on:
+      - elasticsearch
+    ports:
+      - "9000:9000"
+    environment:
+      - JVM_OPTS=-Xms512m -Xmx1g
+    volumes:
+      - thehive_data:/opt/thp/thehive/data
+
+  cortex:
+    image: thehiveproject/cortex:3-latest
+    ports:
+      - "9001:9001"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - cortex_data:/var/docker/cortex/data
+
+volumes:
+  es_data:
+  thehive_data:
+  cortex_data:
+```
+
+```bash
+docker-compose up -d
+
+# TheHive : http://172.16.10.20:9000
+# Cortex  : http://172.16.10.20:9001
+# Login par defaut TheHive : admin@thehive.local / secret
+```
+
+## 10.2 Configuration des Analyzers Cortex
+
+```
+1. Aller dans Cortex : http://172.16.10.20:9001
+2. Menu Organizations > Ajouter une organisation "SOC-LAB"
+3. Menu Analyzers > Activer :
+   - VirusTotal_GetReport (necessite une cle API gratuite)
+   - AbuseIPDB (cle API gratuite)
+   - URLhaus (sans cle)
+   - MalwareBazaar (sans cle)
+   - Shodan_Host (cle API gratuite)
+4. Dans TheHive Settings > Cortex > Ajouter le serveur Cortex
+```
+
+## 10.3 Connexion TheHive ↔ ELK (Alertes Automatiques)
+
+```bash
+# Installer ElastAlert2 sur la VM ELK pour envoyer les alertes vers TheHive
+pip3 install elastalert2
+
+# Creer une regle ElastAlert
+mkdir /opt/elastalert/rules
+nano /opt/elastalert/rules/kerberoasting.yaml
+```
+
+```yaml
+name: Kerberoasting Detected
+type: any
+index: logs-winlogbeat-*
+filter:
+  - term:
+      winlog.event_id: "4769"
+  - term:
+      winlog.event_data.TicketEncryptionType: "0x17"
+
+alert: hivealerter
+hive_connection:
+  hive_host: http://172.16.10.20
+  hive_port: 9000
+  hive_apikey: VOTRE_API_KEY_THEHIVE
+hive_alert_config:
+  title: "Kerberoasting - TGS RC4 Detected"
+  type: "external"
+  source: "ELK"
+  severity: 3
+  tags: ["AD", "Kerberoasting", "T1558.003"]
+```
+
+---
+
+# 11. Phase 9 — AI Automation : Shuffle SOAR + Ollama (Semaine 6-7)
+
+## 11.1 Installation Shuffle SOAR + Ollama (172.16.10.90)
+
+Cette VM orchestre le triage automatique des alertes avec un LLM local (Llama3).
+
+```bash
+# Sur la VM AI/SOAR (Ubuntu 22.04) — 16 GB RAM, 6 vCPU — IP 172.16.10.90
+sudo apt install -y docker.io docker-compose curl
+
+# Installer Shuffle SOAR
+git clone https://github.com/Shuffle/Shuffle /opt/shuffle
+cd /opt/shuffle
+docker-compose up -d
+# Interface : http://172.16.10.90:3001
+# Login : admin@shuffler.io / password
+
+# Installer Ollama (LLM local)
+curl -fsSL https://ollama.ai/install.sh | sh
+sudo systemctl enable --now ollama
+
+# Telecharger le modele Llama3 (8B — ~5 GB)
+ollama pull llama3:8b
+
+# Verifier que l'API est active
+curl http://localhost:11434/api/tags
+```
+
+## 11.2 Workflow Shuffle — Triage Automatique des Alertes
+
+Creer le workflow suivant dans l'interface Shuffle (http://172.16.10.90:3001) :
+
+```
+[ELK Webhook Trigger]
+        |
+        v
+[Extraire champs : src_ip, hash, event_id, hostname, rule_name]
+        |
+        v
+[Appel Ollama API - Triage LLM]
+POST http://172.16.10.90:11434/api/generate
+{
+  "model": "llama3:8b",
+  "prompt": "Tu es un analyste SOC. Analyse cette alerte de securite et donne : severite (1-10), resume en 2 phrases, action recommandee, technique MITRE ATT&CK probable.\n\nAlerte: {{alert_json}}"
+}
+        |
+        v
+[Requete OpenCTI - Verifier IOC]
+POST http://172.16.10.80:8080/graphql
+Query: { stixCyberObservables(filters: [{key:"value", values:["{{src_ip}}"]}]) { edges { node { id entity_type } } } }
+        |
+        v
+[Appel Cortex - VirusTotal Hash Lookup]
+POST http://172.16.10.20:9001/api/analyzer/VirusTotal_GetReport_3_0/run
+{"data": "{{process_hash}}", "dataType": "hash"}
+        |
+        v
+[Creer Cas TheHive]
+POST http://172.16.10.20:9000/api/v1/case
+{
+  "title": "{{rule_name}} sur {{hostname}}",
+  "description": "{{llm_summary}}",
+  "severity": {{llm_severity}},
+  "tags": ["{{mitre_technique}}", "auto-triage"],
+  "observables": [{"dataType": "ip", "data": "{{src_ip}}"}, {"dataType": "hash", "data": "{{process_hash}}"}]
+}
+        |
+        v
+[Si severite >= 7 : Trigger Velociraptor Hunt]
+POST https://172.16.10.50:8000/api/v1/CreateHunt
+{"HuntDescription": "Auto-Hunt: {{rule_name}}", "StartRequest": {"flow_name": "Generic.System.Pstree"}}
+        |
+        v
+[Fin : Cas TheHive enrichi pret pour l'analyste]
+```
+
+## 11.3 Configuration du Webhook ELK → Shuffle
+
+```bash
+# Dans Kibana > Stack Management > Watcher
+# Ou via Elasticsearch API :
+curl -X PUT "http://172.16.10.10:9200/_watcher/watch/soc-alert-webhook" \
+  -H 'Content-Type: application/json' \
+  -u elastic:MOT_DE_PASSE \
+  -d '{
+    "trigger": {"schedule": {"interval": "1m"}},
+    "input": {
+      "search": {
+        "request": {
+          "indices": ["logs-*"],
+          "body": {
+            "query": {"range": {"@timestamp": {"gte": "now-1m"}}},
+            "filter": [{"term": {"event.kind": "alert"}}]
+          }
+        }
+      }
+    },
+    "actions": {
+      "notify_shuffle": {
+        "webhook": {
+          "method": "POST",
+          "url": "http://172.16.10.90:3001/api/v1/hooks/VOTRE_WEBHOOK_ID",
+          "body": "{{ctx.payload}}"
+        }
+      }
+    }
+  }'
+```
+
+---
+
+# 12. Configuration Elastic Security — Detection SIEM
+
+## 12.1 Activation des Regles de Detection
+
+```
+1. Ouvrir Kibana : http://172.16.10.10:5601
+2. Menu > Security > Rules > Detection rules
+3. Activer les regles pre-integrees Active Directory :
+   - "Kerberos Traffic from Unusual Process"
+   - "LSASS Memory Read via Process Access"
+   - "Mimikatz Powershell Module Activity"
+   - "Pass-the-Hash - Detected via Winlogbeat"
+   - "BloodHound AD Discovery"
+4. Importer les regles Sigma converties (voir section 9.4)
+```
+
+## 12.2 Regles de Detection Critiques
+
+| Regle | Event IDs | Attaque Detectee | MITRE |
 | --- | --- | --- | --- |
-| [ ] | Configurer ESXi — vSwitch LAB-NET isole | CRITIQUE | A faire |
-| [ ] | Installer et configurer Active Directory DC (lab.local) | CRITIQUE | A faire |
-| [ ] | Creer les comptes AD : alice.dupont, bob.admin | CRITIQUE | A faire |
-| [ ] | Deployer ELK Stack + Elasticsearch + Kibana + Logstash | CRITIQUE | A faire |
-| [ ] | Installer Sysmon sur Windows Target 1 et Target 2 | HAUTE | A faire |
+| Kerberoasting Activity | 4769 (RC4) | Extraction tickets Kerberos | T1558.003 |
+| LSASS Memory Read | Sysmon 10 | Dumping credentials (Mimikatz) | T1003.001 |
+| Pass-the-Hash | 4624 Type 3 | Utilisation hash NTLM | T1550.002 |
+| Brute Force Login | 4625 x10+ | Attaque par force brute | T1110 |
+| Lateral Movement SMB | 4648 + Sysmon 3 | Mouvement lateral | T1021.002 |
+| BloodHound Recon | 4662 + LDAP | Enumeration AD | T1069.002 |
+| Evil-WinRM | 4624 + Sysmon 3/22 | Remote shell WinRM | T1021.006 |
+| Nmap Scan | Suricata IDS | Reconnaissance reseau | T1046 |
+
+## 12.3 Dashboards Kibana
+
+- **Security Overview** : alertes par severite, MITRE ATT&CK heatmap
+- **Windows Security Events** : Event IDs 4624, 4625, 4768, 4769, 4672
+- **Sysmon Dashboard** : processus, connexions reseau, LSASS access
+- **Suricata Alerts** : alertes IDS par categorie et IP source
+- **DFIR Timeline** : reconstruction chronologique des evenements
+- **Threat Hunting** : requetes KQL personnalisees
+
+---
+
+# 13. Checklist d'Implementation
+
+| | Tache | Priorite | Statut |
+| --- | --- | --- | --- |
+| [ ] | Configurer ESXi — LAB-SWITCH + 5 Port Groups VLAN | CRITIQUE | A faire |
+| [ ] | Installer pfSense 2.8.1 — 6 interfaces — regles firewall | CRITIQUE | A faire |
+| [ ] | Installer Active Directory DC01 — lab.local (VLAN 20) | CRITIQUE | A faire |
+| [ ] | Creer les comptes AD : alice.dupont, bob.admin, svc_sql | CRITIQUE | A faire |
+| [ ] | Deployer WIN-TARGET-1 et WIN-TARGET-2 (VLAN 20) | HAUTE | A faire |
+| [ ] | Deployer Linux Target — SSH/Apache/FTP (VLAN 30) | HAUTE | A faire |
+| [ ] | Deployer ELK Stack — Elasticsearch + Kibana + Logstash | CRITIQUE | A faire |
+| [ ] | Installer Sysmon sur Windows Target 1 et 2 | HAUTE | A faire |
 | [ ] | Configurer Winlogbeat sur toutes les VMs Windows | HAUTE | A faire |
-| [ ] | Installer et configurer Suricata IDS reseau | HAUTE | A faire |
-| [ ] | Configurer Filebeat sur Suricata vers ELK | HAUTE | A faire |
-| [ ] | Deployer Linux Target (SSH, Apache, FTP + Elastic Agent) | HAUTE | A faire |
-| [ ] | Configurer Kali Linux avec BloodHound + Neo4j | HAUTE | A faire |
-| [ ] | Installer SIFT Workstation (Forensics VM) | MOYENNE | A faire |
-| [ ] | Activer Elastic Security + regles detection AD | HAUTE | A faire |
+| [ ] | Installer Elastic Agent sur Linux Target | HAUTE | A faire |
+| [ ] | Installer et configurer Suricata IDS (MONITOR-PG) | HAUTE | A faire |
+| [ ] | Configurer Filebeat Suricata → ELK | HAUTE | A faire |
+| [ ] | Configurer Kali Linux (VLAN 99) — outils offensifs | HAUTE | A faire |
+| [ ] | Installer SIFT Workstation (Forensics VM — VLAN 10) | MOYENNE | A faire |
+| [ ] | Installer Velociraptor Server (172.16.10.50) | HAUTE | A faire |
+| [ ] | Deployer les agents Velociraptor sur toutes les cibles | HAUTE | A faire |
+| [ ] | Integrer Sigma Rules dans Elasticsearch | HAUTE | A faire |
+| [ ] | Installer OpenCTI + ATT&CK Navigator (172.16.10.80) | HAUTE | A faire |
+| [ ] | Installer TheHive 5 + Cortex (172.16.10.20) | HAUTE | A faire |
+| [ ] | Configurer les Analyzers Cortex (VirusTotal, AbuseIPDB) | MOYENNE | A faire |
+| [ ] | Connecter ElastAlert2 → TheHive | HAUTE | A faire |
+| [ ] | Installer Shuffle SOAR + Ollama Llama3 (172.16.10.90) | HAUTE | A faire |
+| [ ] | Creer le workflow de triage automatique Shuffle | HAUTE | A faire |
+| [ ] | Activer Elastic Security + regles detection AD + Sigma | HAUTE | A faire |
 | [ ] | Executer Scenario 1 : Reconnaissance BloodHound | MOYENNE | A faire |
-| [ ] | Executer Scenario 2 : Kerberoasting + verification alertes | MOYENNE | A faire |
-| [ ] | Executer Scenario 3 : Pass-the-Hash + analyse SIEM | MOYENNE | A faire |
-| [ ] | Executer Scenario 4 : Brute Force + Suricata alertes | MOYENNE | A faire |
-| [ ] | Analyse forensique avec Volatility 3 (memoire) | BASSE | A faire |
+| [ ] | Executer Scenario 2 : Kerberoasting + alertes TheHive | MOYENNE | A faire |
+| [ ] | Executer Scenario 3 : Pass-the-Hash + triage AI | MOYENNE | A faire |
+| [ ] | Executer Scenario 4 : Brute Force + Suricata | MOYENNE | A faire |
+| [ ] | Executer Scenario 5 : Lateral Movement + hunt Velociraptor | MOYENNE | A faire |
+| [ ] | Analyse forensique Volatility 3 (memoire) | BASSE | A faire |
 | [ ] | Creer les dashboards Kibana SOC | BASSE | A faire |
+| [ ] | Valider le pipeline AI : alerte → Shuffle → TheHive case | HAUTE | A faire |
 | [ ] | Documenter les resultats et rediger le rapport final | CRITIQUE | A faire |
 
-# 10. Planning Suggere (5 Semaines)
+---
+
+# 14. Planning Suggere (8 Semaines)
 
 | Semaine | Phase | Taches Principales |
 | --- | --- | --- |
-| S1 | Infrastructure de Base | ESXi config, AD DC, Windows Targets, reseau LAB-NET |
-| S2 | ELK Stack + Agents | Elasticsearch, Kibana, Logstash, Sysmon, Winlogbeat, Filebeat |
-| S3 | Suricata + Kali | IDS reseau, regles de detection, outils offensifs, BloodHound |
-| S4 | Scenarios d'Attaques | Kerberoasting, Pass-the-Hash, Brute Force, Lateral Movement |
-| S5 | DFIR + Rapport | Forensics VM, analyse memoire/disque, dashboards, documentation |
+| S1 | Infrastructure Reseau | ESXi, LAB-SWITCH VLAN, pfSense, AD DC, Windows Targets |
+| S2 | SIEM + Agents | ELK Stack, Sysmon, Winlogbeat, Elastic Agent, Filebeat |
+| S3 | IDS + Attaque | Suricata MONITOR-PG, Kali VLAN 99, scenarios BloodHound/Kerberoasting |
+| S4 | DFIR + Forensics | SIFT VM, Volatility 3, analyse memoire/disque, timeline Plaso |
+| S5 | Threat Hunting | Velociraptor server/agents, hunts VQL, Sigma Rules, OpenCTI |
+| S6 | TheHive + Cortex | Installation, analyzers Cortex, integration ELK via ElastAlert2 |
+| S7 | AI Automation | Shuffle SOAR, Ollama Llama3, workflow triage automatique |
+| S8 | Tests + Rapport | Validation complete, dashboards, documentation, rapport final |
 
-## 10.1 Conseils pour la Reussite du Projet
+## 14.1 Conseils pour la Reussite du Projet
 
-- Documenter chaque etape : prendre des screenshots des configurations et resultats
-- Tester la connectivite entre VMs avant de passer a la phase suivante
+- Documenter chaque etape avec des screenshots des configurations et resultats
+- Tester la connectivite entre VLANs via pfSense avant chaque nouvelle phase
 - Creer des snapshots VMware apres chaque etape majeure reussie
-- Verifier que les logs arrivent bien dans Kibana avant de lancer les scenarios d'attaques
-- Correleler les alertes SIEM avec les attaques lancees depuis Kali pour valider la detection
-- Pour le rapport : inclure des captures Kibana montrant les alertes generees par chaque attaque
-> Acces depuis les Postes de l'Ecole
-> Kibana Dashboard : http://172.16.10.10:5601 (via navigateur)
-> SSH vers VMs    : ssh user@172.16.10.XX (port 22)
-> Aucun outil lourd a installer en local
-> tout tourne sur le Dell R750
-> Les postes physiques ne sont PAS sur le LAB-NET
-> acces reseau de l'ecole uniquement
+- Verifier que les logs arrivent dans Kibana avant de lancer les scenarios d'attaques
+- Correpeler les alertes SIEM + TheHive avec les attaques Kali pour valider la detection
+- Valider que le pipeline AI cree bien un cas TheHive enrichi pour chaque alerte critique
+- Pour le rapport final : inclure des captures Kibana, TheHive, Velociraptor et Shuffle
 
-# 11. References et Ressources
+> **Points d'Acces depuis les Postes de l'Ecole (via pfSense NAT)**
+>
+> | Service | URL | Port |
+> | --- | --- | --- |
+> | ESXi Management | https://10.30.40.19 | 443 |
+> | pfSense WebUI | https://10.30.40.50 | 443 |
+> | Kibana SIEM | http://10.30.40.50:5601 | 5601 |
+> | TheHive 5 | http://10.30.40.50:9000 | 9000 |
+> | Shuffle SOAR | http://10.30.40.50:3001 | 3001 |
+> | OpenCTI | http://10.30.40.50:8080 | 8080 |
+> | Velociraptor | https://10.30.40.50:8000 | 8000 |
+> | ATT&CK Navigator | http://10.30.40.50:4242 | 4242 |
+
+---
+
+# 15. References et Ressources
 
 ## Documentation Officielle
 
@@ -668,15 +1115,29 @@ Utilisez cette checklist pour suivre l'avancement du projet :
 - BloodHound Wiki : https://github.com/BloodHoundAD/BloodHound/wiki
 - Volatility 3 : https://volatility3.readthedocs.io
 - SIFT Workstation : https://www.sans.org/tools/sift-workstation
+- TheHive Project : https://docs.strangebee.com/thehive
+- Cortex Analyzers : https://github.com/TheHive-Project/Cortex-Analyzers
+- Velociraptor : https://docs.velociraptor.app
+- OpenCTI Platform : https://docs.opencti.io
+- Shuffle SOAR : https://shuffler.io/docs
+- Ollama : https://ollama.ai/docs
+- Sigma Rules : https://github.com/SigmaHQ/sigma
+- MITRE ATT&CK : https://attack.mitre.org
+
 ## Ressources d'Apprentissage
 
 - TryHackMe — SOC Level 1 : https://tryhackme.com/path/outline/soclevel1
+- TryHackMe — Threat Hunting : https://tryhackme.com/path/outline/threatintel
 - Hack The Box — Active Directory Tracks
 - SANS SEC504 — Hacker Tools, Techniques and Incident Handling
+- SANS FOR508 — Advanced Incident Response, Threat Hunting
 - SwiftOnSecurity Sysmon Config : https://github.com/SwiftOnSecurity/sysmon-config
-- Sigma Rules (detection generique) : https://github.com/SigmaHQ/sigma
-**Projet PFA — SOC / Active Directory / DFIR**
+- Velociraptor VQL Reference : https://docs.velociraptor.app/vql_reference
 
-Architecture Lab — Dell PowerEdge R750 — VMware ESXi 7.0 — lab.local — 172.16.10.0/24
+---
 
-Avril 2026
+**Projet PFA — SOC / Active Directory / DFIR / Threat Hunting / AI Automation**
+
+Architecture Lab — Dell PowerEdge R750 — VMware ESXi 7.0 — VLAN 10/20/30/99 — lab.local
+
+13 VMs — 88 GB RAM — 1010 GB — Avril 2026

@@ -1,0 +1,898 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>SOC Lab Architecture — PFA 2026</title>
+<style>
+  :root {
+    --blue:#3b82f6; --blue-light:#dbeafe; --blue-dark:#1d4ed8;
+    --green:#22c55e; --green-light:#dcfce7; --green-dark:#15803d;
+    --orange:#f97316; --orange-light:#ffedd5; --orange-dark:#c2410c;
+    --red:#ef4444; --red-light:#fee2e2; --red-dark:#b91c1c;
+    --purple:#a855f7; --purple-light:#f3e8ff; --purple-dark:#7e22ce;
+    --indigo:#6366f1; --indigo-light:#e0e7ff; --indigo-dark:#4338ca;
+    --amber:#f59e0b; --amber-light:#fef3c7; --amber-dark:#b45309;
+    --teal:#14b8a6; --teal-light:#ccfbf1; --teal-dark:#0f766e;
+    --gray:#6b7280; --gray-light:#f3f4f6; --gray-dark:#374151;
+    --navy:#0f172a; --navy2:#1e293b;
+  }
+  * { box-sizing: border-box; margin:0; padding:0; }
+  body { font-family: 'Segoe UI', system-ui, sans-serif; background:#f1f5f9; color:#1e293b; }
+
+  /* HEADER */
+  header {
+    background: linear-gradient(135deg, var(--navy) 0%, #1e3a5f 50%, #0c2340 100%);
+    color:#fff; padding:0; position:sticky; top:0; z-index:100;
+    box-shadow:0 4px 20px rgba(0,0,0,.4);
+  }
+  .header-top {
+    display:flex; align-items:center; justify-content:space-between;
+    padding:14px 28px; border-bottom:1px solid rgba(255,255,255,.1);
+  }
+  .header-top h1 { font-size:1.25rem; font-weight:700; letter-spacing:.5px; }
+  .header-top h1 span { color:#60a5fa; }
+  .badges { display:flex; gap:8px; flex-wrap:wrap; }
+  .badge {
+    background:rgba(255,255,255,.1); border:1px solid rgba(255,255,255,.2);
+    padding:3px 10px; border-radius:999px; font-size:.72rem; font-weight:600;
+    color:#e2e8f0; white-space:nowrap;
+  }
+  .badge.green { background:rgba(34,197,94,.2); border-color:rgba(34,197,94,.4); color:#86efac; }
+  .badge.blue  { background:rgba(59,130,246,.2); border-color:rgba(59,130,246,.4); color:#93c5fd; }
+  .badge.red   { background:rgba(239,68,68,.2);  border-color:rgba(239,68,68,.4);  color:#fca5a5; }
+
+  /* TABS */
+  nav.tabs { display:flex; gap:0; padding:0 28px; background:var(--navy2); }
+  .tab-btn {
+    padding:10px 20px; background:transparent; border:none; color:#94a3b8;
+    font-size:.82rem; font-weight:600; cursor:pointer; border-bottom:3px solid transparent;
+    transition:all .2s; white-space:nowrap; letter-spacing:.3px;
+  }
+  .tab-btn:hover { color:#e2e8f0; }
+  .tab-btn.active { color:#60a5fa; border-bottom-color:#60a5fa; }
+
+  /* CONTENT */
+  .tab-panel { display:none; padding:28px; }
+  .tab-panel.active { display:block; }
+
+  /* SECTION TITLE */
+  .section-title {
+    font-size:1rem; font-weight:700; color:var(--navy);
+    border-left:4px solid var(--blue); padding-left:12px;
+    margin-bottom:20px; text-transform:uppercase; letter-spacing:.8px;
+  }
+
+  /* ===================== SVG DIAGRAM STYLES ===================== */
+  .diagram-wrap {
+    background:#fff; border-radius:12px; padding:24px;
+    box-shadow:0 2px 12px rgba(0,0,0,.08); overflow-x:auto;
+  }
+  svg text { font-family:'Segoe UI',system-ui,sans-serif; }
+
+  /* ===================== CARDS ===================== */
+  .cards-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:16px; }
+  .card {
+    background:#fff; border-radius:10px; overflow:hidden;
+    box-shadow:0 2px 8px rgba(0,0,0,.07);
+    border-top:4px solid var(--blue);
+  }
+  .card-header {
+    padding:10px 14px; display:flex; align-items:center; gap:8px;
+    font-weight:700; font-size:.82rem; letter-spacing:.4px;
+  }
+  .card-body { padding:12px 14px; font-size:.8rem; }
+  .card-body li { list-style:none; padding:3px 0; border-bottom:1px solid #f1f5f9; }
+  .card-body li:last-child { border-bottom:none; }
+  .card-body li b { color:var(--navy); }
+
+  /* ===================== TABLES ===================== */
+  .table-wrap { overflow-x:auto; background:#fff; border-radius:10px; box-shadow:0 2px 8px rgba(0,0,0,.07); }
+  table { width:100%; border-collapse:collapse; font-size:.82rem; }
+  thead th {
+    background:var(--navy); color:#e2e8f0; padding:10px 14px;
+    text-align:left; font-weight:600; letter-spacing:.4px; font-size:.78rem;
+  }
+  tbody tr:nth-child(even) { background:#f8fafc; }
+  tbody td { padding:8px 14px; border-bottom:1px solid #e2e8f0; }
+  .vlan-10 td:first-child { border-left:4px solid var(--blue); }
+  .vlan-20 td:first-child { border-left:4px solid var(--green); }
+  .vlan-30 td:first-child { border-left:4px solid var(--orange); }
+  .vlan-99 td:first-child { border-left:4px solid var(--red); }
+  .vlan-mon td:first-child { border-left:4px solid var(--purple); }
+  .vlan-new { background:#fffbeb !important; }
+  .vlan-new td:first-child { border-left:4px solid var(--amber); }
+  .pill {
+    display:inline-block; padding:2px 8px; border-radius:999px;
+    font-size:.7rem; font-weight:700; line-height:1.4;
+  }
+  .pill-10  { background:var(--blue-light);   color:var(--blue-dark); }
+  .pill-20  { background:var(--green-light);  color:var(--green-dark); }
+  .pill-30  { background:var(--orange-light); color:var(--orange-dark); }
+  .pill-99  { background:var(--red-light);    color:var(--red-dark); }
+  .pill-mon { background:var(--purple-light); color:var(--purple-dark); }
+  .pill-new { background:var(--amber-light);  color:var(--amber-dark); }
+  .pill-ai  { background:var(--indigo-light); color:var(--indigo-dark); }
+
+  /* ===================== FLOW PIPELINE ===================== */
+  .pipeline { display:flex; flex-direction:column; gap:0; }
+  .pipe-step {
+    display:flex; align-items:flex-start; gap:16px;
+    background:#fff; border-radius:10px; padding:16px 20px;
+    box-shadow:0 2px 8px rgba(0,0,0,.07); margin-bottom:4px;
+    position:relative;
+  }
+  .pipe-num {
+    width:36px; height:36px; border-radius:50%;
+    display:flex; align-items:center; justify-content:center;
+    font-weight:800; font-size:1rem; flex-shrink:0; color:#fff;
+  }
+  .pipe-arrow {
+    text-align:center; color:#94a3b8; font-size:1.3rem;
+    line-height:1; padding:4px 0;
+  }
+  .pipe-content h4 { font-size:.88rem; font-weight:700; margin-bottom:4px; }
+  .pipe-content p  { font-size:.78rem; color:#64748b; }
+  .pipe-content code { background:#f1f5f9; padding:1px 5px; border-radius:4px; font-size:.74rem; }
+
+  /* ===================== LEGEND ===================== */
+  .legend { display:flex; flex-wrap:wrap; gap:10px; margin-bottom:20px; }
+  .leg-item {
+    display:flex; align-items:center; gap:6px;
+    background:#fff; padding:6px 12px; border-radius:8px;
+    font-size:.78rem; font-weight:600; box-shadow:0 1px 4px rgba(0,0,0,.06);
+  }
+  .leg-dot { width:12px; height:12px; border-radius:3px; }
+
+  /* ===================== ALERT BOX ===================== */
+  .alert-box {
+    padding:12px 16px; border-radius:8px; font-size:.82rem;
+    margin-bottom:16px; border-left:4px solid;
+  }
+  .alert-info    { background:#eff6ff; border-color:var(--blue);   color:#1d4ed8; }
+  .alert-success { background:#f0fdf4; border-color:var(--green);  color:#15803d; }
+  .alert-warn    { background:#fffbeb; border-color:var(--amber);  color:#92400e; }
+
+  /* ===================== FOOTER ===================== */
+  footer {
+    background:var(--navy); color:#64748b; text-align:center;
+    padding:16px; font-size:.75rem; margin-top:20px;
+  }
+  footer span { color:#60a5fa; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-top">
+    <h1>SOC Lab Architecture — <span>PFA 2026</span></h1>
+    <div class="badges">
+      <span class="badge">Dell PowerEdge R750</span>
+      <span class="badge blue">VMware ESXi 7.0</span>
+      <span class="badge">255 GB RAM · 24 vCPU</span>
+      <span class="badge green">pfSense 2.8.1</span>
+      <span class="badge red">13 VMs</span>
+      <span class="badge">Avril 2026</span>
+    </div>
+  </div>
+  <nav class="tabs">
+    <button class="tab-btn active" onclick="showTab('arch')">Architecture</button>
+    <button class="tab-btn" onclick="showTab('integration')">Integration Flow</button>
+    <button class="tab-btn" onclick="showTab('ai')">AI Automation</button>
+    <button class="tab-btn" onclick="showTab('vms')">VM Inventory</button>
+    <button class="tab-btn" onclick="showTab('fw')">Firewall Rules</button>
+  </nav>
+</header>
+
+<!-- ============================================================ -->
+<!-- TAB 1 — ARCHITECTURE DIAGRAM                                 -->
+<!-- ============================================================ -->
+<div id="tab-arch" class="tab-panel active">
+  <div class="section-title">Network Architecture — draw.io Diagram</div>
+
+  <div class="legend">
+    <div class="leg-item"><div class="leg-dot" style="background:var(--gray)"></div>School / WAN (10.30.40.0/22)</div>
+    <div class="leg-item"><div class="leg-dot" style="background:var(--blue)"></div>VLAN 10 — MGMT (172.16.10.0/24)</div>
+    <div class="leg-item"><div class="leg-dot" style="background:var(--green)"></div>VLAN 20 — CORP (172.16.20.0/24)</div>
+    <div class="leg-item"><div class="leg-dot" style="background:var(--orange)"></div>VLAN 30 — DMZ (172.16.30.0/24)</div>
+    <div class="leg-item"><div class="leg-dot" style="background:var(--red)"></div>VLAN 99 — ATTACKER (172.16.99.0/24)</div>
+    <div class="leg-item"><div class="leg-dot" style="background:var(--purple)"></div>MONITOR-PG (VLAN 4095)</div>
+    <div class="leg-item"><div class="leg-dot" style="background:var(--amber)"></div>NEW — TheHive / Threat Hunting</div>
+    <div class="leg-item"><div class="leg-dot" style="background:var(--indigo)"></div>NEW — AI / SOAR Automation</div>
+  </div>
+
+  <div class="diagram-wrap">
+    <svg viewBox="0 0 1300 1020" width="100%" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="arr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <path d="M0,0 L0,6 L8,3 z" fill="#64748b"/>
+        </marker>
+        <marker id="arr-blue" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <path d="M0,0 L0,6 L8,3 z" fill="#3b82f6"/>
+        </marker>
+        <marker id="arr-red" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <path d="M0,0 L0,6 L8,3 z" fill="#ef4444"/>
+        </marker>
+        <marker id="arr-amber" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <path d="M0,0 L0,6 L8,3 z" fill="#f59e0b"/>
+        </marker>
+        <marker id="arr-teal" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <path d="M0,0 L0,6 L8,3 z" fill="#14b8a6"/>
+        </marker>
+        <marker id="arr-purple" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <path d="M0,0 L0,6 L8,3 z" fill="#a855f7"/>
+        </marker>
+        <filter id="shadow" x="-5%" y="-5%" width="110%" height="110%">
+          <feDropShadow dx="2" dy="2" stdDeviation="3" flood-opacity="0.12"/>
+        </filter>
+        <filter id="shadow-sm" x="-3%" y="-3%" width="106%" height="106%">
+          <feDropShadow dx="1" dy="1" stdDeviation="2" flood-opacity="0.1"/>
+        </filter>
+      </defs>
+
+      <!-- ── SCHOOL NETWORK ── -->
+      <rect x="30" y="18" width="1240" height="90" rx="10" fill="#f8fafc" stroke="#9ca3af" stroke-width="2" filter="url(#shadow)"/>
+      <rect x="30" y="18" width="1240" height="28" rx="10" fill="#6b7280"/>
+      <rect x="30" y="36" width="1240" height="10" rx="0" fill="#6b7280"/>
+      <text x="650" y="36" text-anchor="middle" fill="#fff" font-size="13" font-weight="700">SCHOOL NETWORK / INTERNET — 10.30.40.0/22</text>
+      <!-- Laptop -->
+      <rect x="60" y="56" width="140" height="40" rx="6" fill="#e2e8f0" stroke="#9ca3af" stroke-width="1.5" filter="url(#shadow-sm)"/>
+      <text x="130" y="72" text-anchor="middle" fill="#374151" font-size="10" font-weight="700">Analyst Laptop</text>
+      <text x="130" y="86" text-anchor="middle" fill="#6b7280" font-size="9">10.30.40.x</text>
+      <!-- ESXi mgmt -->
+      <rect x="220" y="56" width="160" height="40" rx="6" fill="#e2e8f0" stroke="#9ca3af" stroke-width="1.5" filter="url(#shadow-sm)"/>
+      <text x="300" y="72" text-anchor="middle" fill="#374151" font-size="10" font-weight="700">ESXi Management</text>
+      <text x="300" y="86" text-anchor="middle" fill="#6b7280" font-size="9">10.30.40.19 (vmnic0)</text>
+
+      <!-- ── vmnic0 line ── -->
+      <line x1="650" y1="108" x2="650" y2="138" stroke="#9ca3af" stroke-width="2.5" stroke-dasharray="5,3" marker-end="url(#arr)"/>
+      <text x="662" y="128" fill="#6b7280" font-size="9">vmnic0</text>
+
+      <!-- ── ESXi OUTER BOX ── -->
+      <rect x="30" y="138" width="1240" height="852" rx="12" fill="#f8fafc" stroke="#334155" stroke-width="2.5" filter="url(#shadow)"/>
+      <rect x="30" y="138" width="1240" height="30" rx="12" fill="#1e293b"/>
+      <rect x="30" y="155" width="1240" height="13" rx="0" fill="#1e293b"/>
+      <text x="650" y="158" text-anchor="middle" fill="#94a3b8" font-size="12" font-weight="700">Dell PowerEdge R750 — VMware ESXi 7.0 — 255 GB RAM / 24 vCPU / 2× Datastores</text>
+
+      <!-- vSwitch0 -->
+      <rect x="50" y="180" width="190" height="50" rx="8" fill="#fff" stroke="#6b7280" stroke-width="1.5" filter="url(#shadow-sm)"/>
+      <text x="145" y="200" text-anchor="middle" fill="#374151" font-size="10" font-weight="700">vSwitch0 (WAN-PG)</text>
+      <text x="145" y="216" text-anchor="middle" fill="#6b7280" font-size="9">vmnic0 uplink</text>
+      <!-- LAB-SWITCH -->
+      <rect x="280" y="180" width="980" height="50" rx="8" fill="#fff" stroke="#334155" stroke-width="2" filter="url(#shadow-sm)"/>
+      <text x="770" y="200" text-anchor="middle" fill="#1e293b" font-size="11" font-weight="700">LAB-SWITCH (vSwitch1) — Standard vSwitch — MTU 1500 — No Physical Uplink — Promiscuous Mode</text>
+      <text x="770" y="216" text-anchor="middle" fill="#6b7280" font-size="9">Port Groups: MONITOR-PG (4095) · ATTACKER-PG (99) · DMZ-PG (30) · CORP-PG (20) · MGMT-PG (10)</text>
+
+      <!-- ── pfSense ── -->
+      <rect x="400" y="252" width="500" height="72" rx="10" fill="#1e293b" stroke="#3b82f6" stroke-width="2.5" filter="url(#shadow)"/>
+      <!-- shield icon -->
+      <path d="M415,268 L415,303 Q415,312 428,316 Q441,312 441,303 L441,268 Z" fill="#3b82f6" opacity=".7"/>
+      <text x="445" y="272" fill="#93c5fd" font-size="10" font-weight="700">pfSense 2.8.1-RELEASE</text>
+      <text x="445" y="287" fill="#94a3b8" font-size="9">WAN (em0): 10.30.40.50/22 DHCP   |   LAN (em1): 172.16.10.1/24</text>
+      <text x="445" y="301" fill="#94a3b8" font-size="9">OPT1 (em2): 172.16.20.1/24   |   OPT2 (em3): 172.16.30.1/24</text>
+      <text x="445" y="315" fill="#94a3b8" font-size="9">OPT3 (em4): 172.16.99.1/24   |   OPT4 (em5): MONITOR</text>
+      <!-- line from LAB-SWITCH to pfSense -->
+      <line x1="650" y1="230" x2="650" y2="252" stroke="#334155" stroke-width="2" marker-end="url(#arr)"/>
+      <!-- line from vSwitch0 to pf -->
+      <path d="M145,230 L145,240 L405,240 L405,252" stroke="#6b7280" stroke-width="1.5" fill="none" marker-end="url(#arr)"/>
+
+      <!-- ── VLAN lines from pfSense ── -->
+      <!-- To MGMT -->
+      <line x1="520" y1="324" x2="200" y2="370" stroke="#3b82f6" stroke-width="2" marker-end="url(#arr-blue)"/>
+      <!-- To CORP -->
+      <line x1="590" y1="324" x2="520" y2="370" stroke="#22c55e" stroke-width="2" marker-end="url(#arr)"/>
+      <!-- To DMZ -->
+      <line x1="710" y1="324" x2="790" y2="370" stroke="#f97316" stroke-width="2" marker-end="url(#arr)"/>
+      <!-- To ATTACKER -->
+      <line x1="800" y1="324" x2="1030" y2="370" stroke="#ef4444" stroke-width="2" marker-end="url(#arr-red)"/>
+      <!-- To MONITOR -->
+      <line x1="650" y1="324" x2="650" y2="930" stroke="#a855f7" stroke-width="1.5" stroke-dasharray="6,4" marker-end="url(#arr-purple)"/>
+
+      <!-- ====== VLAN 10 MGMT ====== -->
+      <rect x="40" y="370" width="340" height="560" rx="10" fill="#eff6ff" stroke="#3b82f6" stroke-width="2" filter="url(#shadow)"/>
+      <rect x="40" y="370" width="340" height="28" rx="10" fill="#3b82f6"/>
+      <rect x="40" y="388" width="340" height="10" rx="0" fill="#3b82f6"/>
+      <text x="210" y="388" text-anchor="middle" fill="#fff" font-size="11" font-weight="700">VLAN 10 — MGMT — 172.16.10.0/24</text>
+
+      <!-- ELK VM -->
+      <rect x="58" y="410" width="150" height="68" rx="8" fill="#fff" stroke="#3b82f6" stroke-width="1.5" filter="url(#shadow-sm)"/>
+      <rect x="58" y="410" width="150" height="20" rx="8" fill="#1d4ed8"/>
+      <rect x="58" y="420" width="150" height="10" rx="0" fill="#1d4ed8"/>
+      <text x="133" y="424" text-anchor="middle" fill="#fff" font-size="9" font-weight="700">ELK STACK (SIEM)</text>
+      <text x="133" y="440" text-anchor="middle" fill="#374151" font-size="9" font-weight="600">172.16.10.10</text>
+      <text x="133" y="453" text-anchor="middle" fill="#6b7280" font-size="8">16G RAM · 4 vCPU · 200G</text>
+      <text x="133" y="466" text-anchor="middle" fill="#6b7280" font-size="8">Elasticsearch · Kibana · Logstash</text>
+
+      <!-- TheHive NEW -->
+      <rect x="218" y="410" width="150" height="68" rx="8" fill="#fffbeb" stroke="#f59e0b" stroke-width="2" filter="url(#shadow-sm)"/>
+      <rect x="218" y="410" width="150" height="20" rx="8" fill="#b45309"/>
+      <rect x="218" y="420" width="150" height="10" rx="0" fill="#b45309"/>
+      <text x="293" y="424" text-anchor="middle" fill="#fff" font-size="9" font-weight="700">THEHIVE 5 + CORTEX ✦</text>
+      <text x="293" y="440" text-anchor="middle" fill="#374151" font-size="9" font-weight="600">172.16.10.20</text>
+      <text x="293" y="453" text-anchor="middle" fill="#6b7280" font-size="8">8G RAM · 4 vCPU · 100G</text>
+      <text x="293" y="466" text-anchor="middle" fill="#6b7280" font-size="8">Case Mgmt · Cortex Analyzers</text>
+
+      <!-- Suricata -->
+      <rect x="58" y="492" width="150" height="68" rx="8" fill="#fff" stroke="#3b82f6" stroke-width="1.5" filter="url(#shadow-sm)"/>
+      <rect x="58" y="492" width="150" height="20" rx="8" fill="#1d4ed8"/>
+      <rect x="58" y="502" width="150" height="10" rx="0" fill="#1d4ed8"/>
+      <text x="133" y="506" text-anchor="middle" fill="#fff" font-size="9" font-weight="700">SURICATA IDS</text>
+      <text x="133" y="522" text-anchor="middle" fill="#374151" font-size="9" font-weight="600">172.16.10.40</text>
+      <text x="133" y="535" text-anchor="middle" fill="#6b7280" font-size="8">4G RAM · 2 vCPU · 40G</text>
+      <text x="133" y="548" text-anchor="middle" fill="#6b7280" font-size="8">Network IDS · MONITOR NIC</text>
+
+      <!-- Velociraptor NEW -->
+      <rect x="218" y="492" width="150" height="68" rx="8" fill="#f0fdfa" stroke="#14b8a6" stroke-width="2" filter="url(#shadow-sm)"/>
+      <rect x="218" y="492" width="150" height="20" rx="8" fill="#0f766e"/>
+      <rect x="218" y="502" width="150" height="10" rx="0" fill="#0f766e"/>
+      <text x="293" y="506" text-anchor="middle" fill="#fff" font-size="9" font-weight="700">VELOCIRAPTOR ✦</text>
+      <text x="293" y="522" text-anchor="middle" fill="#374151" font-size="9" font-weight="600">172.16.10.50</text>
+      <text x="293" y="535" text-anchor="middle" fill="#6b7280" font-size="8">4G RAM · 2 vCPU · 60G</text>
+      <text x="293" y="548" text-anchor="middle" fill="#6b7280" font-size="8">Endpoint Hunting · VQL</text>
+
+      <!-- SIFT Forensics -->
+      <rect x="58" y="574" width="150" height="68" rx="8" fill="#fff" stroke="#3b82f6" stroke-width="1.5" filter="url(#shadow-sm)"/>
+      <rect x="58" y="574" width="150" height="20" rx="8" fill="#1d4ed8"/>
+      <rect x="58" y="584" width="150" height="10" rx="0" fill="#1d4ed8"/>
+      <text x="133" y="588" text-anchor="middle" fill="#fff" font-size="9" font-weight="700">FORENSICS SIFT</text>
+      <text x="133" y="604" text-anchor="middle" fill="#374151" font-size="9" font-weight="600">172.16.10.70</text>
+      <text x="133" y="617" text-anchor="middle" fill="#6b7280" font-size="8">8G RAM · 4 vCPU · 100G</text>
+      <text x="133" y="630" text-anchor="middle" fill="#6b7280" font-size="8">Volatility · Autopsy · SIFT</text>
+
+      <!-- OpenCTI NEW -->
+      <rect x="218" y="574" width="150" height="68" rx="8" fill="#f0fdfa" stroke="#14b8a6" stroke-width="2" filter="url(#shadow-sm)"/>
+      <rect x="218" y="574" width="150" height="20" rx="8" fill="#0f766e"/>
+      <rect x="218" y="584" width="150" height="10" rx="0" fill="#0f766e"/>
+      <text x="293" y="588" text-anchor="middle" fill="#fff" font-size="9" font-weight="700">OPENCTI ✦</text>
+      <text x="293" y="604" text-anchor="middle" fill="#374151" font-size="9" font-weight="600">172.16.10.80</text>
+      <text x="293" y="617" text-anchor="middle" fill="#6b7280" font-size="8">8G RAM · 4 vCPU · 80G</text>
+      <text x="293" y="630" text-anchor="middle" fill="#6b7280" font-size="8">Threat Intel · ATT&amp;CK · IOC</text>
+
+      <!-- AI/SOAR NEW -->
+      <rect x="58" y="656" width="310" height="68" rx="8" fill="#eef2ff" stroke="#6366f1" stroke-width="2" filter="url(#shadow-sm)"/>
+      <rect x="58" y="656" width="310" height="20" rx="8" fill="#4338ca"/>
+      <rect x="58" y="666" width="310" height="10" rx="0" fill="#4338ca"/>
+      <text x="213" y="670" text-anchor="middle" fill="#fff" font-size="9" font-weight="700">AI / SOAR VM — Shuffle + Ollama LLM ✦</text>
+      <text x="213" y="686" text-anchor="middle" fill="#374151" font-size="9" font-weight="600">172.16.10.90</text>
+      <text x="213" y="699" text-anchor="middle" fill="#6b7280" font-size="8">16G RAM · 6 vCPU · 150G</text>
+      <text x="213" y="712" text-anchor="middle" fill="#6b7280" font-size="8">Shuffle SOAR · Ollama (Llama3) · Auto Triage</text>
+
+      <!-- Sigma Rules label -->
+      <rect x="58" y="740" width="310" height="36" rx="6" fill="#dbeafe" stroke="#3b82f6" stroke-width="1" stroke-dasharray="5,3"/>
+      <text x="213" y="756" text-anchor="middle" fill="#1d4ed8" font-size="9" font-weight="700">Sigma Rules (integrated in ELK)</text>
+      <text x="213" y="769" text-anchor="middle" fill="#1d4ed8" font-size="8">MITRE ATT&amp;CK mapped · No extra VM needed</text>
+
+      <!-- ATT&CK Navigator label -->
+      <rect x="58" y="786" width="310" height="36" rx="6" fill="#ccfbf1" stroke="#14b8a6" stroke-width="1" stroke-dasharray="5,3"/>
+      <text x="213" y="802" text-anchor="middle" fill="#0f766e" font-size="9" font-weight="700">ATT&amp;CK Navigator (container on OpenCTI VM)</text>
+      <text x="213" y="815" text-anchor="middle" fill="#0f766e" font-size="8">Coverage mapping · Technique visualization</text>
+
+      <!-- ====== VLAN 20 CORP ====== -->
+      <rect x="400" y="370" width="230" height="300" rx="10" fill="#f0fdf4" stroke="#22c55e" stroke-width="2" filter="url(#shadow)"/>
+      <rect x="400" y="370" width="230" height="28" rx="10" fill="#16a34a"/>
+      <rect x="400" y="388" width="230" height="10" rx="0" fill="#16a34a"/>
+      <text x="515" y="388" text-anchor="middle" fill="#fff" font-size="11" font-weight="700">VLAN 20 — CORP — 172.16.20.0/24</text>
+
+      <!-- DC01 -->
+      <rect x="418" y="412" width="196" height="60" rx="8" fill="#fff" stroke="#16a34a" stroke-width="1.5" filter="url(#shadow-sm)"/>
+      <rect x="418" y="412" width="196" height="20" rx="8" fill="#15803d"/>
+      <rect x="418" y="422" width="196" height="10" rx="0" fill="#15803d"/>
+      <text x="516" y="426" text-anchor="middle" fill="#fff" font-size="9" font-weight="700">DC01 — Active Directory</text>
+      <text x="516" y="442" text-anchor="middle" fill="#374151" font-size="9" font-weight="600">172.16.20.10</text>
+      <text x="516" y="455" text-anchor="middle" fill="#6b7280" font-size="8">4G RAM · 2 vCPU · 80G · DNS/Kerberos</text>
+
+      <!-- WIN-TARGET-1 -->
+      <rect x="418" y="484" width="196" height="60" rx="8" fill="#fff" stroke="#16a34a" stroke-width="1.5" filter="url(#shadow-sm)"/>
+      <rect x="418" y="484" width="196" height="20" rx="8" fill="#15803d"/>
+      <rect x="418" y="494" width="196" height="10" rx="0" fill="#15803d"/>
+      <text x="516" y="498" text-anchor="middle" fill="#fff" font-size="9" font-weight="700">WIN-TARGET-1 (alice.dupont)</text>
+      <text x="516" y="514" text-anchor="middle" fill="#374151" font-size="9" font-weight="600">172.16.20.30</text>
+      <text x="516" y="527" text-anchor="middle" fill="#6b7280" font-size="8">4G RAM · Sysmon · Winlogbeat</text>
+
+      <!-- WIN-TARGET-2 -->
+      <rect x="418" y="556" width="196" height="60" rx="8" fill="#fff" stroke="#16a34a" stroke-width="1.5" filter="url(#shadow-sm)"/>
+      <rect x="418" y="556" width="196" height="20" rx="8" fill="#15803d"/>
+      <rect x="418" y="566" width="196" height="10" rx="0" fill="#15803d"/>
+      <text x="516" y="570" text-anchor="middle" fill="#fff" font-size="9" font-weight="700">WIN-TARGET-2 (bob.admin)</text>
+      <text x="516" y="586" text-anchor="middle" fill="#374151" font-size="9" font-weight="600">172.16.20.31</text>
+      <text x="516" y="599" text-anchor="middle" fill="#6b7280" font-size="8">4G RAM · DA account · Pass-Hash lab</text>
+
+      <!-- Velociraptor agents label -->
+      <rect x="418" y="628" width="196" height="28" rx="6" fill="#ccfbf1" stroke="#14b8a6" stroke-width="1"/>
+      <text x="516" y="646" text-anchor="middle" fill="#0f766e" font-size="8" font-weight="700">Velociraptor Agents deployed</text>
+
+      <!-- ====== VLAN 30 DMZ ====== -->
+      <rect x="650" y="370" width="230" height="200" rx="10" fill="#fff7ed" stroke="#f97316" stroke-width="2" filter="url(#shadow)"/>
+      <rect x="650" y="370" width="230" height="28" rx="10" fill="#ea580c"/>
+      <rect x="650" y="388" width="230" height="10" rx="0" fill="#ea580c"/>
+      <text x="765" y="388" text-anchor="middle" fill="#fff" font-size="11" font-weight="700">VLAN 30 — DMZ — 172.16.30.0/24</text>
+
+      <!-- Linux Target -->
+      <rect x="668" y="412" width="196" height="80" rx="8" fill="#fff" stroke="#ea580c" stroke-width="1.5" filter="url(#shadow-sm)"/>
+      <rect x="668" y="412" width="196" height="20" rx="8" fill="#c2410c"/>
+      <rect x="668" y="422" width="196" height="10" rx="0" fill="#c2410c"/>
+      <text x="766" y="426" text-anchor="middle" fill="#fff" font-size="9" font-weight="700">LINUX TARGET</text>
+      <text x="766" y="442" text-anchor="middle" fill="#374151" font-size="9" font-weight="600">172.16.30.10</text>
+      <text x="766" y="455" text-anchor="middle" fill="#6b7280" font-size="8">4G RAM · 2 vCPU · 40G</text>
+      <text x="766" y="467" text-anchor="middle" fill="#6b7280" font-size="8">SSH · Apache · FTP · Elastic Agent</text>
+      <text x="766" y="479" text-anchor="middle" fill="#6b7280" font-size="8">auditd → Logstash :5044</text>
+
+      <!-- Velociraptor agents label DMZ -->
+      <rect x="668" y="504" width="196" height="28" rx="6" fill="#ccfbf1" stroke="#14b8a6" stroke-width="1"/>
+      <text x="766" y="522" text-anchor="middle" fill="#0f766e" font-size="8" font-weight="700">Velociraptor Agent deployed</text>
+
+      <!-- ====== VLAN 99 ATTACKER ====== -->
+      <rect x="900" y="370" width="210" height="160" rx="10" fill="#fef2f2" stroke="#ef4444" stroke-width="2" filter="url(#shadow)"/>
+      <rect x="900" y="370" width="210" height="28" rx="10" fill="#b91c1c"/>
+      <rect x="900" y="388" width="210" height="10" rx="0" fill="#b91c1c"/>
+      <text x="1005" y="388" text-anchor="middle" fill="#fff" font-size="11" font-weight="700">VLAN 99 — ATTACKER — 172.16.99.0/24</text>
+
+      <!-- Kali -->
+      <rect x="918" y="412" width="174" height="80" rx="8" fill="#fff" stroke="#b91c1c" stroke-width="1.5" filter="url(#shadow-sm)"/>
+      <rect x="918" y="412" width="174" height="20" rx="8" fill="#991b1b"/>
+      <rect x="918" y="422" width="174" height="10" rx="0" fill="#991b1b"/>
+      <text x="1005" y="426" text-anchor="middle" fill="#fff" font-size="9" font-weight="700">KALI LINUX</text>
+      <text x="1005" y="442" text-anchor="middle" fill="#374151" font-size="9" font-weight="600">172.16.99.10</text>
+      <text x="1005" y="455" text-anchor="middle" fill="#6b7280" font-size="8">8G RAM · 4 vCPU · 80G</text>
+      <text x="1005" y="467" text-anchor="middle" fill="#6b7280" font-size="8">BloodHound · MSF · Mimikatz</text>
+      <text x="1005" y="479" text-anchor="middle" fill="#6b7280" font-size="8">Impacket · CrackMapExec</text>
+
+      <!-- Attack arrow VLAN99→20 -->
+      <path d="M920,460 L640,490" stroke="#ef4444" stroke-width="1.5" stroke-dasharray="7,3" fill="none" marker-end="url(#arr-red)"/>
+      <text x="770" y="462" text-anchor="middle" fill="#b91c1c" font-size="8" font-weight="700" transform="rotate(-5,770,462)">Attacks</text>
+
+      <!-- ====== MONITOR-PG ====== -->
+      <rect x="40" y="944" width="1220" height="38" rx="8" fill="#f3e8ff" stroke="#a855f7" stroke-width="2"/>
+      <text x="650" y="960" text-anchor="middle" fill="#7e22ce" font-size="10" font-weight="700">MONITOR-PG (VLAN 4095) — Promiscuous Mode — No IP — Suricata Sniff NIC sees ALL inter-VLAN traffic</text>
+      <text x="650" y="975" text-anchor="middle" fill="#9333ea" font-size="8">All 4 VLANs traffic mirrored here → Suricata IDS analysis → eve.json → Filebeat → Logstash 5044 → ELK</text>
+
+      <!-- Log flow arrows -->
+      <!-- Winlogbeat → ELK -->
+      <path d="M516,672 Q420,720 210,740" stroke="#3b82f6" stroke-width="1.5" fill="none" marker-end="url(#arr-blue)" stroke-dasharray="4,2"/>
+      <text x="380" y="714" fill="#1d4ed8" font-size="8" font-weight="600">Winlogbeat/Sysmon</text>
+
+      <!-- Linux → ELK -->
+      <path d="M766,562 Q600,650 250,730" stroke="#3b82f6" stroke-width="1.5" fill="none" marker-end="url(#arr-blue)" stroke-dasharray="4,2"/>
+      <text x="560" y="640" fill="#1d4ed8" font-size="8" font-weight="600">Elastic Agent</text>
+
+      <!-- ELK → TheHive (inside VLAN 10) -->
+      <line x1="208" y1="478" x2="218" y2="450" stroke="#f59e0b" stroke-width="1.5" marker-end="url(#arr-amber)"/>
+
+      <!-- ELK → AI/SOAR -->
+      <path d="M133,640 Q133,680 150,660" stroke="#6366f1" stroke-width="1.5" fill="none" marker-end="url(#arr)"/>
+
+    </svg>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- TAB 2 — INTEGRATION FLOW                                     -->
+<!-- ============================================================ -->
+<div id="tab-integration" class="tab-panel">
+  <div class="section-title">Integration &amp; Data Flow — SOC Pipeline</div>
+  <div class="alert-box alert-info">All components communicate via VLAN 10 (172.16.10.0/24). pfSense enforces inter-VLAN routing and firewall rules.</div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px">
+
+    <div class="diagram-wrap">
+      <svg viewBox="0 0 580 760" width="100%" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <marker id="a2" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+            <path d="M0,0 L0,6 L8,3 z" fill="#64748b"/>
+          </marker>
+        </defs>
+
+        <text x="290" y="26" text-anchor="middle" fill="#1e293b" font-size="14" font-weight="800">Log Collection Pipeline</text>
+
+        <!-- ATTACK -->
+        <rect x="30" y="44" width="520" height="50" rx="8" fill="#fef2f2" stroke="#ef4444" stroke-width="2"/>
+        <text x="290" y="66" text-anchor="middle" fill="#991b1b" font-size="11" font-weight="700">VLAN 99 — Kali attacks CORP / DMZ targets</text>
+        <text x="290" y="82" text-anchor="middle" fill="#b91c1c" font-size="9">BloodHound · Kerberoasting · Pass-the-Hash · Brute Force · Lateral Movement</text>
+
+        <line x1="290" y1="94" x2="290" y2="118" stroke="#64748b" stroke-width="2" marker-end="url(#a2)"/>
+
+        <!-- MONITOR/SURICATA -->
+        <rect x="30" y="118" width="520" height="50" rx="8" fill="#f3e8ff" stroke="#a855f7" stroke-width="2"/>
+        <text x="290" y="140" text-anchor="middle" fill="#7e22ce" font-size="11" font-weight="700">MONITOR-PG (VLAN 4095) — Suricata IDS</text>
+        <text x="290" y="156" text-anchor="middle" fill="#9333ea" font-size="9">All traffic mirrored → eve.json alerts → Filebeat → Logstash :5044</text>
+
+        <line x1="290" y1="168" x2="290" y2="192" stroke="#64748b" stroke-width="2" marker-end="url(#a2)"/>
+
+        <!-- Windows agents -->
+        <rect x="30" y="192" width="250" height="60" rx="8" fill="#f0fdf4" stroke="#22c55e" stroke-width="2"/>
+        <text x="155" y="212" text-anchor="middle" fill="#15803d" font-size="10" font-weight="700">Windows Targets (VLAN 20)</text>
+        <text x="155" y="228" text-anchor="middle" fill="#166534" font-size="8">Sysmon + Winlogbeat</text>
+        <text x="155" y="241" text-anchor="middle" fill="#166534" font-size="8">DC01 · WIN-01 · WIN-02 → :5044</text>
+
+        <!-- Linux agents -->
+        <rect x="300" y="192" width="250" height="60" rx="8" fill="#fff7ed" stroke="#f97316" stroke-width="2"/>
+        <text x="425" y="212" text-anchor="middle" fill="#c2410c" font-size="10" font-weight="700">Linux Target (VLAN 30)</text>
+        <text x="425" y="228" text-anchor="middle" fill="#9a3412" font-size="8">Elastic Agent + auditd</text>
+        <text x="425" y="241" text-anchor="middle" fill="#9a3412" font-size="8">172.16.30.10 → :5044</text>
+
+        <path d="M155,252 L155,280 L290,280" stroke="#64748b" stroke-width="1.5" fill="none" marker-end="url(#a2)"/>
+        <path d="M425,252 L425,280 L290,280" stroke="#64748b" stroke-width="1.5" fill="none" marker-end="url(#a2)"/>
+
+        <!-- ELK -->
+        <rect x="140" y="280" width="300" height="60" rx="8" fill="#eff6ff" stroke="#3b82f6" stroke-width="2.5"/>
+        <text x="290" y="303" text-anchor="middle" fill="#1d4ed8" font-size="12" font-weight="800">ELK Stack (172.16.10.10)</text>
+        <text x="290" y="320" text-anchor="middle" fill="#1d4ed8" font-size="9">Elasticsearch :9200 · Kibana :5601 · Logstash :5044</text>
+
+        <line x1="290" y1="340" x2="290" y2="364" stroke="#64748b" stroke-width="2" marker-end="url(#a2)"/>
+        <text x="300" y="358" fill="#6b7280" font-size="9">Webhook alert</text>
+
+        <!-- Shuffle -->
+        <rect x="140" y="364" width="300" height="50" rx="8" fill="#eef2ff" stroke="#6366f1" stroke-width="2"/>
+        <text x="290" y="384" text-anchor="middle" fill="#4338ca" font-size="11" font-weight="700">Shuffle SOAR (172.16.10.90)</text>
+        <text x="290" y="398" text-anchor="middle" fill="#4f46e5" font-size="9">Automated workflow orchestration</text>
+
+        <line x1="290" y1="414" x2="290" y2="438" stroke="#64748b" stroke-width="2" marker-end="url(#a2)"/>
+
+        <!-- Fork to TheHive and Ollama -->
+        <line x1="290" y1="438" x2="170" y2="438" stroke="#64748b" stroke-width="1.5"/>
+        <line x1="290" y1="438" x2="410" y2="438" stroke="#64748b" stroke-width="1.5"/>
+        <line x1="170" y1="438" x2="170" y2="458" stroke="#64748b" stroke-width="1.5" marker-end="url(#a2)"/>
+        <line x1="410" y1="438" x2="410" y2="458" stroke="#64748b" stroke-width="1.5" marker-end="url(#a2)"/>
+
+        <!-- Ollama -->
+        <rect x="40" y="458" width="260" height="60" rx="8" fill="#eef2ff" stroke="#6366f1" stroke-width="1.5"/>
+        <text x="170" y="478" text-anchor="middle" fill="#4338ca" font-size="10" font-weight="700">Ollama LLM (Llama3)</text>
+        <text x="170" y="493" text-anchor="middle" fill="#4f46e5" font-size="8">Alert summary · Severity score</text>
+        <text x="170" y="506" text-anchor="middle" fill="#4f46e5" font-size="8">Natural language triage</text>
+
+        <!-- TheHive -->
+        <rect x="320" y="458" width="220" height="60" rx="8" fill="#fffbeb" stroke="#f59e0b" stroke-width="2"/>
+        <text x="430" y="478" text-anchor="middle" fill="#b45309" font-size="10" font-weight="700">TheHive 5</text>
+        <text x="430" y="493" text-anchor="middle" fill="#92400e" font-size="8">Case creation</text>
+        <text x="430" y="506" text-anchor="middle" fill="#92400e" font-size="8">172.16.10.20</text>
+
+        <path d="M170,518 L170,540 L290,540 L290,555 L430,555 L430,518" stroke="#64748b" stroke-width="1.5" fill="none" marker-end="url(#a2)"/>
+        <text x="310" y="552" fill="#6b7280" font-size="8">enriched case</text>
+
+        <!-- Cortex -->
+        <rect x="180" y="568" width="220" height="50" rx="8" fill="#fffbeb" stroke="#f59e0b" stroke-width="1.5"/>
+        <text x="290" y="588" text-anchor="middle" fill="#b45309" font-size="10" font-weight="700">Cortex Analyzers</text>
+        <text x="290" y="603" text-anchor="middle" fill="#92400e" font-size="8">VirusTotal · abuse.ch · IP Rep · Hash check</text>
+
+        <line x1="290" y1="618" x2="290" y2="642" stroke="#64748b" stroke-width="1.5" marker-end="url(#a2)"/>
+
+        <!-- OpenCTI -->
+        <rect x="140" y="642" width="300" height="50" rx="8" fill="#f0fdfa" stroke="#14b8a6" stroke-width="2"/>
+        <text x="290" y="662" text-anchor="middle" fill="#0f766e" font-size="10" font-weight="700">OpenCTI (172.16.10.80)</text>
+        <text x="290" y="677" text-anchor="middle" fill="#115e59" font-size="8">IOC matching · MITRE ATT&amp;CK mapping · Threat Intel</text>
+
+        <line x1="290" y1="692" x2="290" y2="716" stroke="#64748b" stroke-width="1.5" marker-end="url(#a2)"/>
+
+        <!-- Velociraptor -->
+        <rect x="140" y="716" width="300" height="40" rx="8" fill="#f0fdfa" stroke="#14b8a6" stroke-width="1.5"/>
+        <text x="290" y="733" text-anchor="middle" fill="#0f766e" font-size="10" font-weight="700">Velociraptor Hunt (172.16.10.50)</text>
+        <text x="290" y="748" text-anchor="middle" fill="#115e59" font-size="8">Live endpoint forensics on affected host</text>
+      </svg>
+    </div>
+
+    <div>
+      <div style="margin-bottom:16px">
+        <div class="section-title" style="font-size:.82rem;margin-bottom:12px">Log Shipping Matrix</div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Source</th><th>Agent</th><th>Destination</th><th>Protocol</th></tr></thead>
+            <tbody>
+              <tr><td>DC01 / WIN-01 / WIN-02</td><td>Winlogbeat + Sysmon</td><td>Logstash :5044</td><td>Beats</td></tr>
+              <tr><td>Linux Target</td><td>Elastic Agent + auditd</td><td>Logstash :5044</td><td>Beats</td></tr>
+              <tr><td>Suricata</td><td>Filebeat (eve.json)</td><td>Logstash :5044</td><td>Beats</td></tr>
+              <tr><td>All targets</td><td>Velociraptor agent</td><td>Velociraptor :8000</td><td>gRPC</td></tr>
+              <tr><td>ELK</td><td>Elasticsearch webhook</td><td>Shuffle SOAR</td><td>HTTP</td></tr>
+              <tr><td>Shuffle</td><td>TheHive4py API</td><td>TheHive :9000</td><td>REST</td></tr>
+              <tr><td>Shuffle</td><td>Cortex API</td><td>Cortex :9001</td><td>REST</td></tr>
+              <tr><td>Shuffle</td><td>Ollama API</td><td>Ollama :11434</td><td>HTTP</td></tr>
+              <tr><td>Shuffle</td><td>OpenCTI API</td><td>OpenCTI :8080</td><td>GraphQL</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="section-title" style="font-size:.82rem;margin-bottom:12px">Key Event IDs Monitored</div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Event ID</th><th>Source</th><th>Attack Pattern</th></tr></thead>
+          <tbody>
+            <tr><td>4769 (RC4)</td><td>DC01 Security</td><td>Kerberoasting</td></tr>
+            <tr><td>Sysmon 10</td><td>Win Target</td><td>LSASS access (Mimikatz)</td></tr>
+            <tr><td>4624 Type 3</td><td>Win Target</td><td>Pass-the-Hash</td></tr>
+            <tr><td>4625 (×10+)</td><td>Win/Linux</td><td>Brute Force</td></tr>
+            <tr><td>4648</td><td>Win Target</td><td>Lateral Movement</td></tr>
+            <tr><td>4662 + LDAP</td><td>DC01</td><td>BloodHound Recon</td></tr>
+            <tr><td>Sysmon 1,3,7</td><td>Win Target</td><td>Process/Network anomaly</td></tr>
+            <tr><td>Suricata alert</td><td>MONITOR</td><td>Nmap/Hydra/SMB</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- TAB 3 — AI AUTOMATION                                        -->
+<!-- ============================================================ -->
+<div id="tab-ai" class="tab-panel">
+  <div class="section-title">AI Automation Pipeline — Shuffle SOAR + Ollama LLM</div>
+  <div class="alert-box alert-warn">All AI processing is local (Ollama/Llama3 on 172.16.10.90). No data leaves the lab network. Internet access only needed for initial model download.</div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+    <div>
+      <div class="pipeline">
+        <div class="pipe-step">
+          <div class="pipe-num" style="background:#ef4444">1</div>
+          <div class="pipe-content">
+            <h4>Alert Generated — ELK / Elasticsearch</h4>
+            <p>Elastic Security detection rule fires. Alert contains: source IP, hostname, process hash, event ID, timestamp, severity.</p>
+            <p><code>POST http://172.16.10.10:9200/_watcher/watch</code></p>
+          </div>
+        </div>
+        <div class="pipe-arrow">▼</div>
+        <div class="pipe-step">
+          <div class="pipe-num" style="background:#6366f1">2</div>
+          <div class="pipe-content">
+            <h4>Shuffle SOAR — Webhook Trigger</h4>
+            <p>Elasticsearch webhook fires → Shuffle receives alert payload → workflow starts automatically.</p>
+            <p><code>POST http://172.16.10.90:3001/api/v1/hooks/...</code></p>
+          </div>
+        </div>
+        <div class="pipe-arrow">▼</div>
+        <div class="pipe-step">
+          <div class="pipe-num" style="background:#6366f1">3</div>
+          <div class="pipe-content">
+            <h4>Data Extraction — Shuffle Action</h4>
+            <p>Shuffle extracts fields: <code>src_ip</code>, <code>process.hash.sha256</code>, <code>winlog.event_id</code>, <code>host.name</code>, <code>rule.name</code>.</p>
+          </div>
+        </div>
+        <div class="pipe-arrow">▼</div>
+        <div class="pipe-step">
+          <div class="pipe-num" style="background:#4338ca">4</div>
+          <div class="pipe-content">
+            <h4>Ollama LLM Triage (local, private)</h4>
+            <p>Shuffle calls Ollama API with alert context. Llama3 model generates: natural-language summary, severity score (1-10), recommended action, MITRE technique guess.</p>
+            <p><code>POST http://172.16.10.90:11434/api/generate</code></p>
+          </div>
+        </div>
+        <div class="pipe-arrow">▼</div>
+        <div class="pipe-step">
+          <div class="pipe-num" style="background:#0f766e">5</div>
+          <div class="pipe-content">
+            <h4>OpenCTI IOC Check</h4>
+            <p>Query OpenCTI for known indicators (IP, hash, domain). Returns threat intel context, threat actor attribution if known.</p>
+            <p><code>GraphQL → http://172.16.10.80:8080/graphql</code></p>
+          </div>
+        </div>
+        <div class="pipe-arrow">▼</div>
+        <div class="pipe-step">
+          <div class="pipe-num" style="background:#b45309">6</div>
+          <div class="pipe-content">
+            <h4>Cortex Automated Analysis</h4>
+            <p>Cortex runs analyzers: VirusTotal hash lookup, IP reputation (abuse.ch), URL analysis. Results enriched into case.</p>
+            <p><code>POST http://172.16.10.20:9001/api/analyzer/.../run</code></p>
+          </div>
+        </div>
+        <div class="pipe-arrow">▼</div>
+        <div class="pipe-step">
+          <div class="pipe-num" style="background:#b45309">7</div>
+          <div class="pipe-content">
+            <h4>TheHive Case Creation</h4>
+            <p>Shuffle creates enriched case in TheHive 5 with: AI summary, IOC data, Cortex results, observables, MITRE tags, severity. Case assigned to analyst.</p>
+            <p><code>POST http://172.16.10.20:9000/api/v1/case</code></p>
+          </div>
+        </div>
+        <div class="pipe-arrow">▼</div>
+        <div class="pipe-step">
+          <div class="pipe-num" style="background:#0f766e">8</div>
+          <div class="pipe-content">
+            <h4>Velociraptor Hunt Trigger</h4>
+            <p>If severity ≥ 7: Shuffle triggers Velociraptor hunt on affected endpoint. Collects process list, network connections, recent files, memory artifacts.</p>
+            <p><code>POST http://172.16.10.50:8000/api/v1/CreateHunt</code></p>
+          </div>
+        </div>
+        <div class="pipe-arrow">▼</div>
+        <div class="pipe-step">
+          <div class="pipe-num" style="background:#22c55e">9</div>
+          <div class="pipe-content">
+            <h4>Analyst Review — TheHive Dashboard</h4>
+            <p>Analyst receives fully enriched case. One-click access to: AI summary, threat intel, Cortex reports, Velociraptor artifacts. MTTR drastically reduced.</p>
+            <p><code>http://172.16.10.20:9000 — TheHive UI</code></p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="section-title" style="font-size:.82rem;margin-bottom:12px">AI/SOAR VM — Software Stack</div>
+      <div class="cards-grid" style="grid-template-columns:1fr;">
+        <div class="card" style="border-top-color:var(--indigo)">
+          <div class="card-header" style="background:var(--indigo-light);color:var(--indigo-dark)">
+            Shuffle SOAR — Open Source (172.16.10.90:3001)
+          </div>
+          <div class="card-body">
+            <ul>
+              <li><b>Deployment:</b> Docker Compose</li>
+              <li><b>Function:</b> Visual workflow automation</li>
+              <li><b>Integrations:</b> ELK, TheHive, Cortex, OpenCTI, Velociraptor, Ollama</li>
+              <li><b>Triggers:</b> Webhooks, Cron, Manual</li>
+              <li><b>Port:</b> 3001 (HTTP)</li>
+            </ul>
+          </div>
+        </div>
+        <div class="card" style="border-top-color:var(--indigo)">
+          <div class="card-header" style="background:var(--indigo-light);color:var(--indigo-dark)">
+            Ollama — Local LLM Server (172.16.10.90:11434)
+          </div>
+          <div class="card-body">
+            <ul>
+              <li><b>Model:</b> llama3:8b (recommended) or mistral:7b</li>
+              <li><b>RAM:</b> ~8 GB for model + ~6 GB OS/Shuffle = 16 GB total</li>
+              <li><b>GPU:</b> CPU-only mode (no GPU pass-through needed)</li>
+              <li><b>API:</b> REST — compatible with OpenAI format</li>
+              <li><b>Privacy:</b> 100% local, zero data exfiltration</li>
+              <li><b>Use cases:</b> Alert triage, report drafting, IOC explanation</li>
+            </ul>
+          </div>
+        </div>
+        <div class="card" style="border-top-color:var(--amber)">
+          <div class="card-header" style="background:var(--amber-light);color:var(--amber-dark)">
+            TheHive 5 + Cortex (172.16.10.20)
+          </div>
+          <div class="card-body">
+            <ul>
+              <li><b>TheHive port:</b> 9000 (HTTP)</li>
+              <li><b>Cortex port:</b> 9001 (HTTP)</li>
+              <li><b>Cortex analyzers:</b> VirusTotal, abuse.ch, Shodan, URLhaus, MalwareBazaar</li>
+              <li><b>Case template:</b> Auto-populated by Shuffle workflow</li>
+              <li><b>Responders:</b> Firewall block, email notification (optional)</li>
+            </ul>
+          </div>
+        </div>
+        <div class="card" style="border-top-color:var(--teal)">
+          <div class="card-header" style="background:var(--teal-light);color:var(--teal-dark)">
+            OpenCTI Platform (172.16.10.80:8080)
+          </div>
+          <div class="card-body">
+            <ul>
+              <li><b>Threat feeds:</b> MITRE ATT&amp;CK, OpenCTI dataset, manual IOC import</li>
+              <li><b>ATT&amp;CK Navigator:</b> container on same VM, port 4242</li>
+              <li><b>API:</b> GraphQL (authenticated)</li>
+              <li><b>Export:</b> STIX 2.1, CSV, JSON</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- TAB 4 — VM INVENTORY                                         -->
+<!-- ============================================================ -->
+<div id="tab-vms" class="tab-panel">
+  <div class="section-title">VM Inventory — All 15 Virtual Machines</div>
+
+  <div class="alert-box alert-success">Total RAM used: ~88 GB / 255 GB available (167 GB free for expansion). Marked ✦ = NEW additions.</div>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>VM Name</th>
+          <th>VLAN</th>
+          <th>IP Address</th>
+          <th>RAM</th>
+          <th>vCPU</th>
+          <th>Disk</th>
+          <th>OS</th>
+          <th>Role / Tools</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr class="vlan-10"><td>pfSense 2.8.1</td><td><span class="pill pill-10">ALL</span></td><td>.x.1 per VLAN / 10.30.40.50</td><td>2G</td><td>1</td><td>20G</td><td>FreeBSD</td><td>Firewall · NAT · VLAN routing · pfBlocker</td></tr>
+        <tr class="vlan-10"><td>ELK Stack (SIEM)</td><td><span class="pill pill-10">VLAN 10</span></td><td>172.16.10.10</td><td>16G</td><td>4</td><td>200G</td><td>Ubuntu 22.04</td><td>Elasticsearch :9200 · Kibana :5601 · Logstash :5044</td></tr>
+        <tr class="vlan-new"><td>TheHive 5 + Cortex ✦</td><td><span class="pill pill-10">VLAN 10</span></td><td>172.16.10.20</td><td>8G</td><td>4</td><td>100G</td><td>Ubuntu 22.04</td><td>Case management :9000 · Cortex analyzers :9001</td></tr>
+        <tr class="vlan-10"><td>Suricata IDS</td><td><span class="pill pill-10">VLAN 10</span></td><td>172.16.10.40</td><td>4G</td><td>2</td><td>40G</td><td>Ubuntu 22.04</td><td>Network IDS · MONITOR NIC · Filebeat → Logstash</td></tr>
+        <tr class="vlan-new"><td>Velociraptor ✦</td><td><span class="pill pill-10">VLAN 10</span></td><td>172.16.10.50</td><td>4G</td><td>2</td><td>60G</td><td>Ubuntu 22.04</td><td>Endpoint hunting :8000 · VQL · Live forensics</td></tr>
+        <tr class="vlan-10"><td>Forensics SIFT</td><td><span class="pill pill-10">VLAN 10</span></td><td>172.16.10.70</td><td>8G</td><td>4</td><td>100G</td><td>Ubuntu 22.04</td><td>Volatility 3 · Autopsy · SIFT · log2timeline</td></tr>
+        <tr class="vlan-new"><td>OpenCTI ✦</td><td><span class="pill pill-10">VLAN 10</span></td><td>172.16.10.80</td><td>8G</td><td>4</td><td>80G</td><td>Ubuntu 22.04</td><td>Threat intel :8080 · ATT&amp;CK Navigator :4242 · STIX</td></tr>
+        <tr class="vlan-new"><td>AI/SOAR VM ✦</td><td><span class="pill pill-ai">VLAN 10</span></td><td>172.16.10.90</td><td>16G</td><td>6</td><td>150G</td><td>Ubuntu 22.04</td><td>Shuffle SOAR :3001 · Ollama LLM :11434 (Llama3)</td></tr>
+        <tr class="vlan-20"><td>DC01 (Active Dir.)</td><td><span class="pill pill-20">VLAN 20</span></td><td>172.16.20.10</td><td>4G</td><td>2</td><td>80G</td><td>Win Server 2022</td><td>AD DS · DNS · Kerberos · LDAP · GPO · lab.local</td></tr>
+        <tr class="vlan-20"><td>WIN-TARGET-1</td><td><span class="pill pill-20">VLAN 20</span></td><td>172.16.20.30</td><td>4G</td><td>2</td><td>60G</td><td>Windows 10 Pro</td><td>alice.dupont · Sysmon · Winlogbeat · Velociraptor agent</td></tr>
+        <tr class="vlan-20"><td>WIN-TARGET-2</td><td><span class="pill pill-20">VLAN 20</span></td><td>172.16.20.31</td><td>4G</td><td>2</td><td>60G</td><td>Windows 10 Pro</td><td>bob.admin (DA) · Pass-the-Hash lab · Sysmon</td></tr>
+        <tr class="vlan-30"><td>Linux Target</td><td><span class="pill pill-30">VLAN 30</span></td><td>172.16.30.10</td><td>4G</td><td>2</td><td>40G</td><td>Ubuntu 22.04</td><td>SSH · Apache · FTP · Elastic Agent · auditd</td></tr>
+        <tr class="vlan-99"><td>Kali Linux</td><td><span class="pill pill-99">VLAN 99</span></td><td>172.16.99.10</td><td>8G</td><td>4</td><td>80G</td><td>Kali 2024</td><td>BloodHound · Metasploit · Mimikatz · Impacket · Hydra</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div style="margin-top:20px;display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px">
+    <div style="background:#fff;border-radius:8px;padding:14px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.07)">
+      <div style="font-size:1.8rem;font-weight:800;color:var(--blue)">88 GB</div>
+      <div style="font-size:.78rem;color:#64748b">RAM Used (of 255 GB)</div>
+    </div>
+    <div style="background:#fff;border-radius:8px;padding:14px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.07)">
+      <div style="font-size:1.8rem;font-weight:800;color:var(--green)">167 GB</div>
+      <div style="font-size:.78rem;color:#64748b">RAM Available</div>
+    </div>
+    <div style="background:#fff;border-radius:8px;padding:14px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.07)">
+      <div style="font-size:1.8rem;font-weight:800;color:var(--orange)">13</div>
+      <div style="font-size:.78rem;color:#64748b">Virtual Machines</div>
+    </div>
+    <div style="background:#fff;border-radius:8px;padding:14px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.07)">
+      <div style="font-size:1.8rem;font-weight:800;color:var(--purple)">5</div>
+      <div style="font-size:.78rem;color:#64748b">VLAN Segments</div>
+    </div>
+    <div style="background:#fff;border-radius:8px;padding:14px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.07)">
+      <div style="font-size:1.8rem;font-weight:800;color:var(--amber)">4 NEW</div>
+      <div style="font-size:.78rem;color:#64748b">Additions (TheHive/Velociraptor/OpenCTI/AI)</div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- TAB 5 — FIREWALL RULES                                       -->
+<!-- ============================================================ -->
+<div id="tab-fw" class="tab-panel">
+  <div class="section-title">Firewall Rules — pfSense 2.8.1</div>
+
+  <div class="table-wrap" style="margin-bottom:20px">
+    <table>
+      <thead>
+        <tr><th>Source</th><th>Destination</th><th>Port/Proto</th><th>Action</th><th>Purpose</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>VLAN 99 (Kali)</td><td>VLAN 20 CORP</td><td>Any</td><td style="color:var(--green);font-weight:700">ALLOW</td><td>Attack simulation → Windows targets</td></tr>
+        <tr><td>VLAN 99 (Kali)</td><td>VLAN 30 DMZ</td><td>Any</td><td style="color:var(--green);font-weight:700">ALLOW</td><td>Attack simulation → Linux target</td></tr>
+        <tr><td>VLAN 99 (Kali)</td><td>WAN/Internet</td><td>Any</td><td style="color:var(--green);font-weight:700">ALLOW</td><td>Tool downloads (Kali updates)</td></tr>
+        <tr><td>VLAN 20/30</td><td>VLAN 10 :5044</td><td>TCP 5044</td><td style="color:var(--green);font-weight:700">ALLOW</td><td>Winlogbeat/Filebeat → Logstash</td></tr>
+        <tr><td>VLAN 20/30</td><td>VLAN 10 :8000</td><td>TCP 8000</td><td style="color:var(--green);font-weight:700">ALLOW</td><td>Velociraptor agents → Server</td></tr>
+        <tr><td>VLAN 10</td><td>VLAN 20/30</td><td>Any</td><td style="color:var(--green);font-weight:700">ALLOW</td><td>Analyst access from MGMT</td></tr>
+        <tr><td>School (10.30.40.x)</td><td>VLAN 10 :5601</td><td>TCP 5601</td><td style="color:var(--green);font-weight:700">ALLOW</td><td>Kibana from analyst laptop (NAT)</td></tr>
+        <tr><td>School (10.30.40.x)</td><td>VLAN 10 :9000</td><td>TCP 9000</td><td style="color:var(--green);font-weight:700">ALLOW</td><td>TheHive UI from analyst laptop</td></tr>
+        <tr><td>School (10.30.40.x)</td><td>VLAN 10 :3001</td><td>TCP 3001</td><td style="color:var(--green);font-weight:700">ALLOW</td><td>Shuffle SOAR UI from analyst laptop</td></tr>
+        <tr><td>School (10.30.40.x)</td><td>VLAN 10 :8080</td><td>TCP 8080</td><td style="color:var(--green);font-weight:700">ALLOW</td><td>OpenCTI UI from analyst laptop</td></tr>
+        <tr><td>School (10.30.40.x)</td><td>VLAN 10 :8000</td><td>TCP 8000</td><td style="color:var(--green);font-weight:700">ALLOW</td><td>Velociraptor UI from analyst laptop</td></tr>
+        <tr style="background:#fee2e2"><td>VLAN 20/30</td><td>VLAN 99</td><td>Any</td><td style="color:var(--red);font-weight:700">BLOCK</td><td>Targets cannot reach attacker</td></tr>
+        <tr style="background:#fee2e2"><td>VLAN 10</td><td>WAN/Internet</td><td>Any (except DNS)</td><td style="color:var(--red);font-weight:700">BLOCK</td><td>MGMT zone isolated — no internet</td></tr>
+        <tr style="background:#fee2e2"><td>VLAN 99</td><td>VLAN 10 :9000,:3001</td><td>TCP 9000,3001</td><td style="color:var(--red);font-weight:700">BLOCK</td><td>Attacker cannot reach TheHive/Shuffle</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="section-title" style="margin-bottom:12px">Access Points — From Analyst Laptop (School Network)</div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Service</th><th>URL / Address</th><th>Credentials</th></tr></thead>
+      <tbody>
+        <tr><td>ESXi Management</td><td>https://10.30.40.19</td><td>root / [ESXi pass]</td></tr>
+        <tr><td>pfSense WebUI</td><td>https://10.30.40.50</td><td>admin / [pfsense pass]</td></tr>
+        <tr><td>Kibana SIEM</td><td>http://10.30.40.50:5601 (NAT)</td><td>elastic / [elk pass]</td></tr>
+        <tr><td>TheHive 5</td><td>http://10.30.40.50:9000 (NAT)</td><td>admin@thehive.local / [pass]</td></tr>
+        <tr><td>Shuffle SOAR</td><td>http://10.30.40.50:3001 (NAT)</td><td>admin / [shuffle pass]</td></tr>
+        <tr><td>OpenCTI</td><td>http://10.30.40.50:8080 (NAT)</td><td>admin@opencti.io / [pass]</td></tr>
+        <tr><td>Velociraptor</td><td>https://10.30.40.50:8000 (NAT)</td><td>admin / [veloci pass]</td></tr>
+        <tr><td>ATT&amp;CK Navigator</td><td>http://10.30.40.50:4242 (NAT)</td><td>No auth</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<footer>
+  <strong style="color:#94a3b8">SOC Lab Architecture v2.0</strong> —
+  Projet Fin d'Année — <span>Dell PowerEdge R750 / VMware ESXi 7.0</span> —
+  SOC · AD · DFIR · TheHive · Threat Hunting · AI Automation —
+  <span>Avril 2026</span>
+</footer>
+
+<script>
+function showTab(id) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + id).classList.add('active');
+  event.target.classList.add('active');
+}
+</script>
+</body>
+</html>
