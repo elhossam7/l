@@ -1142,57 +1142,56 @@ Architecture Lab — Dell PowerEdge R750 — VMware ESXi 7.0 — VLAN 10/20/30/9
 
 13 VMs — 88 GB RAM — 1010 GB — Avril 2026
 
-Good — that option is the **older kernel**:
+The error is **not Winlogbeat problem**. PowerShell is blocking the script because **script execution is disabled**:
+
+`Impossible de charger le fichier ... install-service-winlogbeat.ps1 car l’exécution de scripts est désactivée`
+
+In your PFA guide, this is exactly the Winlogbeat install step after editing `winlogbeat.yml`: run test config, install service, then start Winlogbeat. 
+
+Run these commands in **PowerShell as Administrator**:
+
+```powershell
+cd "C:\Program Files\Winlogbeat\winlogbeat-8.13.0-windows-x86_64"
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+.\install-service-winlogbeat.ps1
+Start-Service winlogbeat
+```
+
+If it asks confirmation, type:
+
+```powershell
+Y
+```
+
+Then verify:
+
+```powershell
+Get-Service winlogbeat
+```
+
+If it still blocks, use temporary bypass:
+
+```powershell
+powershell.exe -ExecutionPolicy Bypass -File .\install-service-winlogbeat.ps1
+Start-Service winlogbeat
+```
+
+Then test Winlogbeat:
+
+```powershell
+.\winlogbeat.exe test config -c winlogbeat.yml -e
+.\winlogbeat.exe test output -c winlogbeat.yml -e
+```
+
+Important: make sure `winlogbeat.yml` has your Logstash IP:
+
+```yaml
+output.logstash:
+  hosts: ["172.16.10.10:5044"]
+```
+
+After that, go to Kibana and check if logs arrive in Discover with something like:
 
 ```text
-Ubuntu, with Linux 6.8.0-31-generic
+logs-winlogbeat-*
 ```
-
-So the problem is with the newer kernel:
-
-```text
-Linux 6.17.0-22-generic
-```
-
-To fix it permanently, boot with the working option **6.8.0-31-generic**, then open Terminal and run:
-
-```bash
-uname -r
-```
-
-Make sure it shows:
-
-```text
-6.8.0-31-generic
-```
-
-Then remove the broken kernel:
-
-```bash
-sudo apt remove --purge 'linux-image-6.17.0-22-generic' 'linux-modules-6.17.0-22-generic' 'linux-modules-extra-6.17.0-22-generic'
-sudo update-grub
-sudo reboot
-```
-
-If one package says “not found”, that is okay. Continue.
-
-After reboot, it should boot directly into the working kernel.
-
-Also install VMware tools:
-
-```bash
-sudo apt update
-sudo apt install open-vm-tools open-vm-tools-desktop -y
-sudo reboot
-```
-
-After everything works, you can keep:
-
-```text
-CPU: 2
-RAM: 8 GB
-Disk: 200 GB
-Network: MGMT-PG
-```
-
-For ELK later, increase RAM back to **12–16 GB**.
