@@ -1141,3 +1141,58 @@ curl -X PUT "http://172.16.10.10:9200/_watcher/watch/soc-alert-webhook" \
 Architecture Lab — Dell PowerEdge R750 — VMware ESXi 7.0 — VLAN 10/20/30/99 — lab.local
 
 13 VMs — 88 GB RAM — 1010 GB — Avril 2026
+
+Good — that option is the **older kernel**:
+
+```text
+Ubuntu, with Linux 6.8.0-31-generic
+```
+
+So the problem is with the newer kernel:
+
+```text
+Linux 6.17.0-22-generic
+```
+
+To fix it permanently, boot with the working option **6.8.0-31-generic**, then open Terminal and run:
+
+```bash
+uname -r
+```
+
+Make sure it shows:
+
+```text
+6.8.0-31-generic
+```
+
+Then remove the broken kernel:
+
+```bash
+sudo apt remove --purge 'linux-image-6.17.0-22-generic' 'linux-modules-6.17.0-22-generic' 'linux-modules-extra-6.17.0-22-generic'
+sudo update-grub
+sudo reboot
+```
+
+If one package says “not found”, that is okay. Continue.
+
+After reboot, it should boot directly into the working kernel.
+
+Also install VMware tools:
+
+```bash
+sudo apt update
+sudo apt install open-vm-tools open-vm-tools-desktop -y
+sudo reboot
+```
+
+After everything works, you can keep:
+
+```text
+CPU: 2
+RAM: 8 GB
+Disk: 200 GB
+Network: MGMT-PG
+```
+
+For ELK later, increase RAM back to **12–16 GB**.
