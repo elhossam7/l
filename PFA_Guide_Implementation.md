@@ -1195,3 +1195,46 @@ After that, go to Kibana and check if logs arrive in Discover with something lik
 ```text
 logs-winlogbeat-*
 ```
+It looks like you're running into a **Signal 4 (`SIGILL`)** error while trying to clone the SIFT workstation saltstack repository on your Ubuntu VM. 
+
+Signal 4 stands for "Illegal Instruction." This happens when a program (in this case, the `git-remote-https` helper) tries to execute a CPU instruction that your processor—or the virtualized CPU provided by VMware—doesn't support or understand. 
+
+Since you just installed `git` via `apt`, the binaries are likely fine, meaning the issue is almost certainly related to how VMware is passing CPU features to your guest OS.
+
+Here are a few ways to bypass or fix this issue:
+
+### 1. The Quick Workaround (Bypass HTTPS)
+If you just need to get the repository downloaded right now so you can continue building out your forensics environment, you can bypass the `git-remote-https` helper entirely.
+
+**Option A: Download the ZIP archive instead**
+You can pull the repository directly using `wget` and unzip it:
+```bash
+wget https://github.com/teamdfir/sift-saltstack/archive/refs/heads/main.zip
+unzip main.zip
+mv sift-saltstack-main sift-saltstack
+```
+
+**Option B: Use SSH instead of HTTPS**
+If you already have SSH keys set up with GitHub on this VM, you can clone using the SSH URL:
+```bash
+git clone git@github.com:teamdfir/sift-saltstack.git sift-saltstack
+```
+
+### 2. The Root Cause Fix (VMware CPU Settings)
+To permanently fix the illegal instruction error so `git clone https://...` works in the future, you usually need to tweak your VMware settings to ensure the guest OS is getting the right CPU instructions.
+
+1. **Shut down** the Ubuntu VM completely.
+2. Go to **VM > Settings** in VMware Workstation.
+3. Under the **Hardware** tab, select **Processors**.
+4. Look at the **Virtualization engine** settings. Try toggling **"Virtualize Intel VT-x/EPT or AMD-V/RVI"** (if it's off, turn it on; if it's on, try turning it off just to test). 
+5. *Also check:* If you are using an older VM compatibility mode, consider upgrading it (VM > Manage > Change Hardware Compatibility) to the latest version your VMware Workstation supports.
+6. Power the VM back on and try the `git clone` command again.
+
+### 3. Reinstall Dependencies (Fallback)
+If tweaking the CPU settings doesn't work, there's a small chance the `curl` or `gnutls` libraries that `git-remote-https` relies on got corrupted or compiled weirdly for your specific kernel (Jammy 22.04). Try reinstalling them:
+```bash
+sudo apt update
+sudo apt install --reinstall git curl libcurl4 gnutls-bin
+```
+
+Have you run into any other `SIGILL` or unexpected crashes on this specific "FORENSICS-PG" VM, or is it strictly isolated to Git right now?
